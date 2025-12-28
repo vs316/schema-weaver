@@ -21,7 +21,6 @@ import {
   ChevronLeft,
   Copy,
   Undo2,
-
   Grid3x3,
   Palette,
   FileText,
