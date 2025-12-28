@@ -1,0 +1,11 @@
+# Static Assets
+/index.html  /index.html  200
+/assets/*    /assets/*    200
+/*.js        /*.js        200
+/*.css       /*.css       200
+
+# Hash-based routes (Auth0 callback tokens)
+/#*  /index.html  200
+
+# SPA fallback
+/*  /index.html  200
