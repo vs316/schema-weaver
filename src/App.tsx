@@ -24,8 +24,14 @@ import {
   Grid3x3,
   Palette,
   FileText,
+  Cloud,
+  ArrowLeft,
+  Loader2,
 } from "lucide-react";
 import html2canvas from "html2canvas";
+import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
+import { DiagramSelector } from "./components/DiagramSelector";
+import type { Json } from "./integrations/supabase/types";
 
 /** --- TYPES --- **/
 type Column = { id: string; name: string; type: string; isPk: boolean; isFk: boolean };
@@ -113,7 +119,19 @@ function LogoutButton() {
 }
 
 
-function ERDBuilder({ user }: { user: Auth0User }) {
+function ERDBuilder({ 
+  user, 
+  diagram,
+  onSave,
+  onBack,
+  syncing,
+}: { 
+  user: Auth0User;
+  diagram: ERDDiagram | null;
+  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => void;
+  onBack: () => void;
+  syncing: boolean;
+}) {
   // --- STATE ---
   const [tables, setTables] = useState<Table[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
@@ -260,24 +278,42 @@ function ERDBuilder({ user }: { user: Auth0User }) {
       suppressHistory.current = false;
     }
   }, [push]);
-  // --- PERSISTENCE (LOAD & AUTO-SAVE) ---
+  // --- PERSISTENCE (LOAD FROM CLOUD & AUTO-SAVE) ---
   const isInitialLoad = useRef(true);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load diagram from cloud on mount
   useEffect(() => {
-    const saved = localStorage.getItem("erd-data");
-    if (saved && isInitialLoad.current) {
+    if (diagram && isInitialLoad.current) {
       isInitialLoad.current = false;
       try {
-        const { t, r, dark, time } = JSON.parse(saved);
-        setTables(t || []);
-        setRelations(r || []);
-        setIsDarkMode(dark ?? true);
-        setLastSaved(time || "Never");
+        const loadedTables = (diagram.tables as Table[]) || [];
+        const loadedRelations = (diagram.relations as Relation[]) || [];
+        const loadedViewport = (diagram.viewport as { x: number; y: number; zoom: number }) || { x: 0, y: 0, zoom: 1 };
+        
+        setTables(loadedTables);
+        setRelations(loadedRelations);
+        setViewport(loadedViewport);
+        setIsDarkMode(diagram.is_dark_mode ?? true);
+        setLastSaved("Loaded from cloud");
       } catch (e) {
-        console.error("Failed to load data", e);
+        console.error("Failed to load data from cloud", e);
+        // Fallback to localStorage
+        const saved = localStorage.getItem("erd-data");
+        if (saved) {
+          try {
+            const { t, r, dark, time } = JSON.parse(saved);
+            setTables(t || []);
+            setRelations(r || []);
+            setIsDarkMode(dark ?? true);
+            setLastSaved(time || "Never");
+          } catch (e) {
+            console.error("Failed to load data from localStorage", e);
+          }
+        }
       }
     }
-  }, []);
+  }, [diagram]);
 
   // Push initial snapshot once loaded
   useEffect(() => {
@@ -287,12 +323,21 @@ function ERDBuilder({ user }: { user: Auth0User }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInitialLoad.current]);
 
+  // Auto-save to cloud and localStorage
   useEffect(() => {
+    if (isInitialLoad.current) return;
     if (tables.length === 0 && relations.length === 0) return;
 
-    const timeout = setTimeout(() => {
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
       setIsSaving(true);
       const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      
+      // Save to localStorage as backup
       localStorage.setItem(
         "erd-data",
         JSON.stringify({
@@ -302,13 +347,27 @@ function ERDBuilder({ user }: { user: Auth0User }) {
           time: now,
         })
       );
+
+      // Save to cloud
+      onSave({
+        tables: tables as Json,
+        relations: relations as Json,
+        viewport: viewport as Json,
+        is_dark_mode: isDarkMode,
+      });
+      
       setLastSaved(now);
       setIsSaving(false);
-      push({ title: "Saved", description: `Last saved at ${now}`, type: "success" });
-    }, 800);
-    return () => clearTimeout(timeout);
+      push({ title: "Synced to cloud", description: `Last saved at ${now}`, type: "success" });
+    }, 1500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tables, relations, isDarkMode]);
+  }, [tables, relations, isDarkMode, viewport]);
 
   // Push history on non-drag meaningful changes
   useEffect(() => {
@@ -1129,6 +1188,15 @@ function ERDBuilder({ user }: { user: Auth0User }) {
             isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
           }`}
         >
+          {/* Back button */}
+          <button
+            onClick={onBack}
+            title="Back to Diagrams"
+            className="p-2 hover:bg-slate-500/15 rounded-xl text-slate-400 hover:text-slate-200 transition-all duration-200 active:scale-95 hover:scale-110 mb-1"
+          >
+            <ArrowLeft size={20} />
+          </button>
+
           <div className="p-2 bg-indigo-600 rounded-xl text-white mb-1 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-shadow duration-300">
             <Database size={24} />
           </div>
@@ -1196,15 +1264,16 @@ function ERDBuilder({ user }: { user: Auth0User }) {
             {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
           </button>
 
+          {/* Cloud sync status */}
           <div className="flex flex-col items-center gap-1 mb-2">
-            <div className={`transition-all duration-500 ${isSaving ? "text-indigo-500 animate-pulse" : isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-              <CheckCircle2 size={16} />
+            <div className={`transition-all duration-500 ${syncing || isSaving ? "text-indigo-500 animate-pulse" : isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+              {syncing ? <Cloud size={16} /> : <CheckCircle2 size={16} />}
             </div>
             <span
               className={`text-[8px] font-bold uppercase vertical-text tracking-widest leading-none transition-colors duration-300 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}
               style={{ writingMode: "vertical-rl" }}
             >
-              {isSaving ? "Saving..." : "Autosave ON"}
+              {syncing ? "Syncing..." : isSaving ? "Saving..." : "Cloud Sync"}
             </span>
           </div>
         </div>
@@ -1909,11 +1978,26 @@ function ERDBuilder({ user }: { user: Auth0User }) {
 
 export default function App() {
   const { user, isLoading, isAuthenticated } = useAuth0();
+  const [selectedDiagram, setSelectedDiagram] = useState<ERDDiagram | null>(null);
+  const [showSelector, setShowSelector] = useState(true);
+  
+  // Use Auth0 sub (user id) for cloud sync
+  const userId = user?.sub;
+  const {
+    diagrams,
+    loading: cloudLoading,
+    syncing,
+    createDiagram,
+    saveDiagram,
+    deleteDiagram,
+    loadDiagram,
+    profileExists,
+  } = useCloudSync(userId);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950">
-        <p className="text-slate-400">Loading...</p>
+        <Loader2 className="animate-spin text-slate-400" size={32} />
       </div>
     );
   }
@@ -1922,5 +2006,51 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  return <ERDBuilder user={user as Auth0User} />;
+  // Show diagram selector
+  if (showSelector && !selectedDiagram) {
+    return (
+      <DiagramSelector
+        diagrams={diagrams}
+        loading={cloudLoading || !profileExists}
+        onSelect={async (diagram) => {
+          const loaded = await loadDiagram(diagram.id);
+          if (loaded) {
+            setSelectedDiagram(loaded);
+            setShowSelector(false);
+          }
+        }}
+        onCreate={async () => {
+          const newDiagram = await createDiagram('New Diagram');
+          if (newDiagram) {
+            setSelectedDiagram(newDiagram);
+            setShowSelector(false);
+          }
+        }}
+        onDelete={async (id) => {
+          await deleteDiagram(id);
+        }}
+      />
+    );
+  }
+
+  const handleSave = async (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => {
+    if (selectedDiagram) {
+      await saveDiagram(selectedDiagram.id, updates);
+    }
+  };
+
+  const handleBack = () => {
+    setSelectedDiagram(null);
+    setShowSelector(true);
+  };
+
+  return (
+    <ERDBuilder
+      user={user as Auth0User}
+      diagram={selectedDiagram}
+      onSave={handleSave}
+      onBack={handleBack}
+      syncing={syncing}
+    />
+  );
 }
