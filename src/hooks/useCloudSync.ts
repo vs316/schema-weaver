@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { useAuth } from './useAuth';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { Json } from '../integrations/supabase/types';
 
 export interface ERDDiagram {
   id: string;
   name: string;
-  tables: unknown[];
-  relations: unknown[];
-  viewport: { x: number; y: number; zoom: number };
+  tables: Json;
+  relations: Json;
+  viewport: Json;
   is_dark_mode: boolean;
   team_id: string | null;
   created_by: string | null;
@@ -17,37 +17,71 @@ export interface ERDDiagram {
   updated_at: string;
 }
 
-export function useCloudSync() {
-  const { user } = useAuth();
+export function useCloudSync(userId?: string) {
   const [diagrams, setDiagrams] = useState<ERDDiagram[]>([]);
   const [currentDiagram, setCurrentDiagram] = useState<ERDDiagram | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [teamId, setTeamId] = useState<string | null>(null);
+  const [profileExists, setProfileExists] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Fetch user's team
+  // Fetch or create user's team/profile
   useEffect(() => {
-    if (!user) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
 
-    const fetchTeam = async () => {
-      const { data } = await supabase
+    const setupProfile = async () => {
+      // Check if profile exists
+      const { data: profile } = await supabase
         .from('profiles')
         .select('team_id')
-        .eq('id', user.id)
+        .eq('id', userId)
         .maybeSingle();
       
-      if (data?.team_id) {
-        setTeamId(data.team_id);
+      if (profile?.team_id) {
+        setTeamId(profile.team_id);
+        setProfileExists(true);
+      } else {
+        // Create team and profile for Auth0 user
+        const { data: newTeam, error: teamError } = await supabase
+          .from('teams')
+          .insert({ name: 'My Team' })
+          .select()
+          .single();
+
+        if (teamError) {
+          console.error('Error creating team:', teamError);
+          setLoading(false);
+          return;
+        }
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            team_id: newTeam.id,
+            display_name: 'User',
+          });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+        } else {
+          setTeamId(newTeam.id);
+          setProfileExists(true);
+        }
       }
+      setLoading(false);
     };
 
-    fetchTeam();
-  }, [user]);
+    setupProfile();
+  }, [userId]);
 
   // Fetch diagrams
   const fetchDiagrams = useCallback(async () => {
-    if (!user || !teamId) return;
+    if (!userId || !teamId) return;
     
     setLoading(true);
     const { data, error } = await supabase
@@ -62,13 +96,13 @@ export function useCloudSync() {
       setDiagrams(data as ERDDiagram[] || []);
     }
     setLoading(false);
-  }, [user, teamId]);
+  }, [userId, teamId]);
 
   useEffect(() => {
-    if (teamId) {
+    if (teamId && profileExists) {
       fetchDiagrams();
     }
-  }, [teamId, fetchDiagrams]);
+  }, [teamId, profileExists, fetchDiagrams]);
 
   // Set up realtime subscription
   useEffect(() => {
@@ -114,7 +148,7 @@ export function useCloudSync() {
 
   // Create new diagram
   const createDiagram = useCallback(async (name: string = 'Untitled Diagram') => {
-    if (!user || !teamId) return null;
+    if (!userId || !teamId) return null;
 
     setSyncing(true);
     const { data, error } = await supabase
@@ -122,11 +156,11 @@ export function useCloudSync() {
       .insert({
         name,
         team_id: teamId,
-        created_by: user.id,
-        updated_by: user.id,
-        tables: [],
-        relations: [],
-        viewport: { x: 0, y: 0, zoom: 1 },
+        created_by: userId,
+        updated_by: userId,
+        tables: [] as Json,
+        relations: [] as Json,
+        viewport: { x: 0, y: 0, zoom: 1 } as Json,
         is_dark_mode: true,
       })
       .select()
@@ -140,25 +174,27 @@ export function useCloudSync() {
     }
 
     return data as ERDDiagram;
-  }, [user, teamId]);
+  }, [userId, teamId]);
 
   // Save diagram
   const saveDiagram = useCallback(async (
     diagramId: string,
-    updates: Partial<Pick<ERDDiagram, 'name' | 'tables' | 'relations' | 'viewport' | 'is_dark_mode'>>
+    updates: {
+      name?: string;
+      tables?: Json;
+      relations?: Json;
+      viewport?: Json;
+      is_dark_mode?: boolean;
+    }
   ) => {
-    if (!user) return false;
+    if (!userId) return false;
 
     setSyncing(true);
     const { error } = await supabase
       .from('erd_diagrams')
       .update({
-        name: updates.name,
-        tables: updates.tables as unknown as Record<string, unknown>[],
-        relations: updates.relations as unknown as Record<string, unknown>[],
-        viewport: updates.viewport as unknown as Record<string, unknown>,
-        is_dark_mode: updates.is_dark_mode,
-        updated_by: user.id,
+        ...updates,
+        updated_by: userId,
       })
       .eq('id', diagramId);
 
@@ -170,11 +206,11 @@ export function useCloudSync() {
     }
 
     return true;
-  }, [user]);
+  }, [userId]);
 
   // Delete diagram
   const deleteDiagram = useCallback(async (diagramId: string) => {
-    if (!user) return false;
+    if (!userId) return false;
 
     const { error } = await supabase
       .from('erd_diagrams')
@@ -187,7 +223,7 @@ export function useCloudSync() {
     }
 
     return true;
-  }, [user]);
+  }, [userId]);
 
   // Load a specific diagram
   const loadDiagram = useCallback(async (diagramId: string) => {
@@ -212,6 +248,7 @@ export function useCloudSync() {
     loading,
     syncing,
     teamId,
+    profileExists,
     fetchDiagrams,
     createDiagram,
     saveDiagram,
