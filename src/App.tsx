@@ -30,7 +30,9 @@ import {
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
+import { usePresence } from "./hooks/usePresence";
 import { DiagramSelector } from "./components/DiagramSelector";
+import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import type { Json } from "./integrations/supabase/types";
 
 /** --- TYPES --- **/
@@ -171,6 +173,13 @@ function ERDBuilder({
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [connectTableSearch, setConnectTableSearch] = useState<string>("");
   const [showCommandTips, setShowCommandTips] = useState(false);
+
+  // --- PRESENCE (Real-time collaboration) ---
+  const { users: presenceUsers, isConnected: presenceConnected, updateCursor } = usePresence(
+    diagram?.id ?? null,
+    user.sub,
+    user.name || user.email
+  );
 
   const [isGridSnap, setIsGridSnap] = useState<boolean>(true);
 
@@ -1166,7 +1175,15 @@ function ERDBuilder({
             <Redo2 size={16} />
           </button> */}
           <span className="mx-2 opacity-30">|</span>
-          {/* <span className="text-xs opacity-60">{user.email}</span> */}
+          
+          {/* Presence Indicator */}
+          <PresenceIndicator 
+            users={presenceUsers} 
+            isConnected={presenceConnected} 
+            isDarkMode={isDarkMode} 
+          />
+          
+          <span className="mx-2 opacity-30">|</span>
           <span className="text-xs text-slate-400">{user.email || user.name}</span>
 
           {/* <button
@@ -1284,7 +1301,12 @@ function ERDBuilder({
           className="relative flex-1 overflow-hidden cursor-crosshair user-select-none"
           onWheel={handleWheel}
           onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleMouseMove}
+          onMouseMove={(e) => {
+            handleMouseMove(e);
+            // Update cursor position for presence
+            const world = toWorld(e.clientX, e.clientY);
+            updateCursor(world.x, world.y);
+          }}
           onMouseUp={(e) => handleMouseUp(e)}
           onMouseLeave={() => handleMouseUp()}
           onContextMenu={(e) => e.preventDefault()}
@@ -1297,6 +1319,10 @@ function ERDBuilder({
             backgroundPosition: `${viewport.x}px ${viewport.y}px`,
           }}
         >
+          {/* Live cursors from other users */}
+          {presenceUsers.map((pUser) => (
+            <LiveCursor key={pUser.id} user={pUser} viewport={viewport} />
+          ))}
           <div
             style={{
               transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
