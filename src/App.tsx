@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "./hooks/useAuth";
 import {
   Plus,
   X,
@@ -56,11 +57,11 @@ declare global {
   }
 }
 
-type Auth0User = {
-  email?: string;
-  name?: string;
-  sub?: string;
-  [key: string]: any;
+type AppUser = {
+  email?: string | null;
+  name?: string | null;
+  id: string;
+  user_metadata?: { display_name?: string };
 };
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -88,30 +89,10 @@ function useToasts() {
   return { toasts, push };
 }
 
-function LoginScreen() {
-  const { loginWithRedirect } = useAuth0();
-  
-  return (
-    <div className="flex items-center justify-center h-screen bg-slate-950">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-white mb-4">ERD Builder</h1>
-        <p className="text-slate-400 mb-8">Sign in to access your diagrams</p>
-        <button
-          onClick={() => loginWithRedirect()}
-          className="px-6 py-3 bg-indigo-500 text-white font-semibold rounded-lg hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-500/20"
-        >
-          Sign in with Auth0
-        </button>
-      </div>
-    </div>
-  );
-}
-function LogoutButton() {
-  const { logout } = useAuth0();
-  
+function LogoutButton({ onLogout }: { onLogout: () => void }) {
   return (
     <button
-       onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+      onClick={onLogout}
       className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all text-xs font-semibold"
     >
       <LogOut size={16} />
@@ -127,12 +108,14 @@ function ERDBuilder({
   onSave,
   onBack,
   syncing,
+  onLogout,
 }: { 
-  user: Auth0User;
+  user: AppUser;
   diagram: ERDDiagram | null;
   onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => void;
   onBack: () => void;
   syncing: boolean;
+  onLogout: () => void;
 }) {
   // --- STATE ---
   const [tables, setTables] = useState<Table[]>([]);
@@ -177,8 +160,8 @@ function ERDBuilder({
   // --- PRESENCE (Real-time collaboration) ---
   const { users: presenceUsers, isConnected: presenceConnected, updateCursor } = usePresence(
     diagram?.id ?? null,
-    user.sub,
-    user.name || user.email
+    user.id,
+    user.user_metadata?.display_name || user.name || user.email || undefined
   );
 
   const [isGridSnap, setIsGridSnap] = useState<boolean>(true);
@@ -1193,7 +1176,7 @@ function ERDBuilder({
   <LogOut size={16} />
   Logout
 </button> */}
- <LogoutButton />
+ <LogoutButton onLogout={onLogout} />
         </div>
       </div>
 
@@ -2003,12 +1986,13 @@ function ERDBuilder({
 }
 
 export default function App() {
-  const { user, isLoading, isAuthenticated } = useAuth0();
+  const navigate = useNavigate();
+  const { user, loading: authLoading, isAuthenticated, signOut } = useAuth();
   const [selectedDiagram, setSelectedDiagram] = useState<ERDDiagram | null>(null);
   const [showSelector, setShowSelector] = useState(true);
   
-  // Use Auth0 sub (user id) for cloud sync
-  const userId = user?.sub;
+  // Use Supabase user id for cloud sync
+  const userId = user?.id;
   const {
     diagrams,
     loading: cloudLoading,
@@ -2020,7 +2004,13 @@ export default function App() {
     profileExists,
   } = useCloudSync(userId);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
+
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950">
         <Loader2 className="animate-spin text-slate-400" size={32} />
@@ -2029,7 +2019,7 @@ export default function App() {
   }
 
   if (!isAuthenticated || !user) {
-    return <LoginScreen />;
+    return null;
   }
 
   // Show diagram selector
@@ -2070,13 +2060,26 @@ export default function App() {
     setShowSelector(true);
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
+  const appUser: AppUser = {
+    id: user.id,
+    email: user.email,
+    name: user.user_metadata?.display_name || user.email,
+    user_metadata: user.user_metadata,
+  };
+
   return (
     <ERDBuilder
-      user={user as Auth0User}
+      user={appUser}
       diagram={selectedDiagram}
       onSave={handleSave}
       onBack={handleBack}
       syncing={syncing}
+      onLogout={handleLogout}
     />
   );
 }
