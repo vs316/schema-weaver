@@ -26,7 +26,7 @@ export function useCloudSync(userId?: string) {
   const [profileExists, setProfileExists] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Fetch or create user's team/profile
+  // Fetch user's team/profile (profile is created by Supabase auth trigger)
   useEffect(() => {
     if (!userId) {
       setLoading(false);
@@ -34,42 +34,34 @@ export function useCloudSync(userId?: string) {
     }
 
     const setupProfile = async () => {
-      // Check if profile exists
-      const { data: profile } = await supabase
+      // Check if profile exists (created by auth trigger)
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('team_id')
         .eq('id', userId)
         .maybeSingle();
       
+      if (error) {
+        console.error('Error fetching profile:', error);
+        setLoading(false);
+        return;
+      }
+
       if (profile?.team_id) {
         setTeamId(profile.team_id);
         setProfileExists(true);
       } else {
-        // Create team and profile for Auth0 user
-        const { data: newTeam, error: teamError } = await supabase
-          .from('teams')
-          .insert({ name: 'My Team' })
-          .select()
-          .single();
-
-        if (teamError) {
-          console.error('Error creating team:', teamError);
-          setLoading(false);
-          return;
-        }
-
-        const { error: profileError } = await supabase
+        // Profile should be created by auth trigger, but wait a bit and retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const { data: retryProfile } = await supabase
           .from('profiles')
-          .insert({
-            id: userId,
-            team_id: newTeam.id,
-            display_name: 'User',
-          });
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-        } else {
-          setTeamId(newTeam.id);
+          .select('team_id')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (retryProfile?.team_id) {
+          setTeamId(retryProfile.team_id);
           setProfileExists(true);
         }
       }
