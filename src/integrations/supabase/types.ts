@@ -139,6 +139,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ensure_profile: { Args: never; Returns: string }
       get_user_team_id: { Args: { user_id: string }; Returns: string }
     }
     Enums: {

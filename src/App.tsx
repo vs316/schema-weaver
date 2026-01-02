@@ -2002,6 +2002,7 @@ export default function App() {
     deleteDiagram,
     loadDiagram,
     profileExists,
+    error: cloudError,
   } = useCloudSync(userId);
 
   useEffect(() => {
@@ -2028,6 +2029,7 @@ export default function App() {
       <DiagramSelector
         diagrams={diagrams}
         loading={cloudLoading || !profileExists}
+        error={cloudError}
         onSelect={async (diagram) => {
           const loaded = await loadDiagram(diagram.id);
           if (loaded) {
