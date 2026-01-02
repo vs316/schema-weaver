@@ -26,7 +26,9 @@ export function useCloudSync(userId?: string) {
   const [profileExists, setProfileExists] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Fetch user's team/profile (profile is created by Supabase auth trigger)
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch user's team/profile (profile is created by ensure_profile function)
   useEffect(() => {
     if (!userId) {
       setLoading(false);
@@ -34,35 +36,50 @@ export function useCloudSync(userId?: string) {
     }
 
     const setupProfile = async () => {
-      // Check if profile exists (created by auth trigger)
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('team_id')
-        .eq('id', userId)
-        .maybeSingle();
+      setError(null);
       
-      if (error) {
-        console.error('Error fetching profile:', error);
-        setLoading(false);
-        return;
-      }
-
-      if (profile?.team_id) {
-        setTeamId(profile.team_id);
-        setProfileExists(true);
-      } else {
-        // Profile should be created by auth trigger, but wait a bit and retry
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const { data: retryProfile } = await supabase
+      // First, call ensure_profile to create profile/team if missing
+      const { data: ensuredTeamId, error: ensureError } = await supabase
+        .rpc('ensure_profile');
+      
+      if (ensureError) {
+        console.error('Error ensuring profile:', ensureError);
+        // Fallback: check if profile already exists
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('team_id')
           .eq('id', userId)
           .maybeSingle();
         
-        if (retryProfile?.team_id) {
-          setTeamId(retryProfile.team_id);
+        if (profileError || !profile?.team_id) {
+          console.error('Profile not found:', profileError);
+          setError('Failed to set up your account. Please try signing out and back in.');
+          setLoading(false);
+          return;
+        }
+        
+        setTeamId(profile.team_id);
+        setProfileExists(true);
+        setLoading(false);
+        return;
+      }
+
+      if (ensuredTeamId) {
+        setTeamId(ensuredTeamId);
+        setProfileExists(true);
+      } else {
+        // Double-check by fetching profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('team_id')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (profile?.team_id) {
+          setTeamId(profile.team_id);
           setProfileExists(true);
+        } else {
+          setError('Failed to set up your account. Please try again.');
         }
       }
       setLoading(false);
@@ -241,6 +258,7 @@ export function useCloudSync(userId?: string) {
     syncing,
     teamId,
     profileExists,
+    error,
     fetchDiagrams,
     createDiagram,
     saveDiagram,

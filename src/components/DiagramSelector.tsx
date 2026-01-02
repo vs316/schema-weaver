@@ -15,6 +15,7 @@ import type { ERDDiagram } from '../hooks/useCloudSync';
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
   loading: boolean;
+  error?: string | null;
   onSelect: (diagram: ERDDiagram) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
@@ -23,6 +24,7 @@ interface DiagramSelectorProps {
 export function DiagramSelector({
   diagrams,
   loading,
+  error,
   onSelect,
   onCreate,
   onDelete,
@@ -43,6 +45,37 @@ export function DiagramSelector({
     if (days < 7) return `${days}d ago`;
     return date.toLocaleDateString();
   };
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'hsl(222 47% 4%)' }}>
+        <div className="text-center max-w-md">
+          <div 
+            className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
+            style={{ background: 'hsl(0 84% 60% / 0.1)' }}
+          >
+            <Cloud size={32} style={{ color: 'hsl(0 84% 60%)' }} />
+          </div>
+          <h2 className="text-lg font-semibold mb-2" style={{ color: 'hsl(210 40% 98%)' }}>
+            Something went wrong
+          </h2>
+          <p className="text-sm mb-4" style={{ color: 'hsl(215 20% 65%)' }}>
+            {error}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-lg font-medium text-sm"
+            style={{
+              background: 'hsl(239 84% 67%)',
+              color: 'hsl(0 0% 100%)',
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
