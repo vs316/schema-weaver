@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../integrations/supabase/client';
+import { supabase } from '../integrations/supabase/safeClient';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import type { Json } from '../integrations/supabase/types';
+
 
 export interface ERDDiagram {
   id: string;

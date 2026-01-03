@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../integrations/supabase/client';
+import { supabase } from '../integrations/supabase/safeClient';
 import { Loader2, Mail, Lock, User, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+
 
 type AuthMode = 'login' | 'signup' | 'forgot-password' | 'reset-password';
 

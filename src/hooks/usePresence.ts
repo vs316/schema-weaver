@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../integrations/supabase/client';
+import { supabase } from '../integrations/supabase/safeClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
 
 export interface PresenceUser {
   id: string;
