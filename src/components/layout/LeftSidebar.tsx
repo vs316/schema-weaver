@@ -66,8 +66,10 @@ export function LeftSidebar({
       initial={{ x: -20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="w-16 border-r border-sidebar-border flex flex-col items-center py-4 space-y-2 bg-sidebar z-30"
+      className="w-16 h-full border-r border-sidebar-border flex flex-col items-center bg-sidebar z-30 overflow-hidden"
     >
+      {/* Scrollable content area */}
+      <div className="flex-1 w-full overflow-y-auto overflow-x-hidden py-4 space-y-2 flex flex-col items-center no-scrollbar">
       {/* Logo */}
       <div className="p-2.5 bg-primary rounded-xl text-primary-foreground mb-2 shadow-glow">
         <Database size={22} />
@@ -165,37 +167,40 @@ export function LeftSidebar({
         <FileText size={18} />
       </button>
 
-      <div className="flex-1" />
+      </div>
 
-      {/* Keyboard Shortcuts */}
-      <button
-        onClick={onShowShortcuts}
-        title="Keyboard Shortcuts (?)"
-        className={`${buttonClass} hover:bg-muted text-muted-foreground hover:text-foreground`}
-      >
-        <Keyboard size={18} />
-      </button>
-
-      {/* Sidebar Toggle */}
-      <button
-        onClick={onToggleSidebar}
-        title={isSidebarOpen ? "Collapse Panel" : "Expand Panel"}
-        className={`${buttonClass} hover:bg-muted text-muted-foreground hover:text-foreground`}
-      >
-        {isSidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-      </button>
-
-      {/* Save Status */}
-      <div className="flex flex-col items-center gap-1 mb-2">
-        <div className={`transition-all duration-500 ${isSaving ? "text-primary animate-pulse" : "text-muted-foreground/50"}`}>
-          <CheckCircle2 size={14} />
-        </div>
-        <span
-          className="text-[7px] font-bold uppercase tracking-widest text-muted-foreground/50"
-          style={{ writingMode: "vertical-rl" }}
+      {/* Fixed bottom section */}
+      <div className="w-full flex flex-col items-center py-4 space-y-2 border-t border-sidebar-border bg-sidebar">
+        {/* Keyboard Shortcuts */}
+        <button
+          onClick={onShowShortcuts}
+          title="Keyboard Shortcuts (?)"
+          className={`${buttonClass} hover:bg-muted text-muted-foreground hover:text-foreground`}
         >
-          {isSaving ? "Saving..." : "Auto"}
-        </span>
+          <Keyboard size={18} />
+        </button>
+
+        {/* Sidebar Toggle */}
+        <button
+          onClick={onToggleSidebar}
+          title={isSidebarOpen ? "Collapse Panel" : "Expand Panel"}
+          className={`${buttonClass} hover:bg-muted text-muted-foreground hover:text-foreground`}
+        >
+          {isSidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+        </button>
+
+        {/* Save Status */}
+        <div className="flex flex-col items-center gap-1">
+          <div className={`transition-all duration-500 ${isSaving ? "text-primary animate-pulse" : "text-muted-foreground/50"}`}>
+            <CheckCircle2 size={14} />
+          </div>
+          <span
+            className="text-[7px] font-bold uppercase tracking-widest text-muted-foreground/50"
+            style={{ writingMode: "vertical-rl" }}
+          >
+            {isSaving ? "Saving..." : "Auto"}
+          </span>
+        </div>
       </div>
     </motion.div>
   );
