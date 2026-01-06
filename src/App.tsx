@@ -2005,7 +2005,7 @@ export default function App() {
     profileExists,
     error: cloudError,
   } = useCloudSync(userId);
-
+  const [bootstrapped, setBootstrapped] = useState(false);
   // useEffect(() => {
   //   if (!authLoading && !isAuthenticated) {
   //     navigate('/auth');
@@ -2018,26 +2018,37 @@ export default function App() {
     const { data } = await supabase.auth.getSession();
     if (!mounted) return;
 
-    const isRecovery =
-      data.session &&
-      window.location.pathname !== "/reset-password" &&
-      window.location.hash.includes("type=recovery");
+    const session = data.session;
 
-    if (isRecovery) {
+    // PASSWORD RECOVERY HAS HIGHEST PRIORITY
+    if (
+      session &&
+      window.location.hash.includes("type=recovery")
+    ) {
       navigate("/reset-password", { replace: true });
+      setBootstrapped(true);
       return;
     }
 
-    if (!authLoading && !isAuthenticated) {
+    // NOT AUTHENTICATED
+    if (!session) {
       navigate("/auth", { replace: true });
+      setBootstrapped(true);
+      return;
     }
+
+    // AUTHENTICATED
+    navigate("/diagrams", { replace: true });
+    setBootstrapped(true);
   })();
 
   return () => {
     mounted = false;
   };
-}, []); // 🔴 EMPTY dependency array is REQUIRED
-
+}, [navigate]);
+  if (!bootstrapped) {
+    return null;
+  }
 
   if (authLoading) {
     return (
