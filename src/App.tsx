@@ -2012,9 +2012,14 @@ export default function App() {
   //   }
   // }, [authLoading, isAuthenticated, navigate]);
   useEffect(() => {
-  supabase.auth.getSession().then(({ data }) => {
+  let mounted = true;
+
+  (async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!mounted) return;
+
     const isRecovery =
-      data.session?.user?.aud === "authenticated" &&
+      data.session &&
       window.location.pathname !== "/reset-password" &&
       window.location.hash.includes("type=recovery");
 
@@ -2024,10 +2029,15 @@ export default function App() {
     }
 
     if (!authLoading && !isAuthenticated) {
-      navigate("/auth");
+      navigate("/auth", { replace: true });
     }
-  });
-}, [authLoading, isAuthenticated, navigate]);
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, []); // 🔴 EMPTY dependency array is REQUIRED
+
 
   if (authLoading) {
     return (

@@ -18,7 +18,7 @@ export default function ResetPassword() {
       navigate("/auth", { replace: true });
     }
   });
-}, [navigate]);
+}, []);
 
   // Detect PASSWORD_RECOVERY session
   useEffect(() => {
