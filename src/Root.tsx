@@ -2,6 +2,7 @@ import React, { Suspense, useMemo } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { StartupErrorScreen } from "./components/StartupErrorScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { getResolvedBackendConfig } from "./integrations/supabase/safeClient";
 
 const App = React.lazy(() => import("./App"));
@@ -80,6 +81,7 @@ export function Root() {
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/*" element={<App />} />
           </Routes>
+          <DiagnosticsPanel />
         </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
