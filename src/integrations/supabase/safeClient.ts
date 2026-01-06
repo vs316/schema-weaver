@@ -13,24 +13,22 @@ const FALLBACK_URL = "https://ekafxpolsdhlktmsgexd.supabase.co";
 const FALLBACK_PUBLISHABLE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrYWZ4cG9sc2RobGt0bXNnZXhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMDc1ODUsImV4cCI6MjA4MjU4MzU4NX0.pWorY9v_1CG3R8DsxuYPU5nUEh9ceOO-cMhd3V4U_WA";
 
-function readEnv(name: string) {
-  return (import.meta as any)?.env?.[name] as string | undefined;
-}
+// function readEnv(name: string) {
+//   return (import.meta as any)?.env?.[name] as string | undefined;
+// }
 
 export function getResolvedBackendConfig(): ResolvedBackendConfig {
   const url =
     import.meta.env.VITE_SUPABASE_URL ||
-    readEnv("SUPABASE_URL") ||
     FALLBACK_URL;
 
   const publishableKey =
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    readEnv("SUPABASE_PUBLISHABLE_KEY") ||
-    readEnv("SUPABASE_ANON_KEY") ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||   // ✅ FIX
     FALLBACK_PUBLISHABLE_KEY;
 
   const hasEnv = Boolean(
-    import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_ANON_KEY
   );
 
   return {
@@ -40,7 +38,11 @@ export function getResolvedBackendConfig(): ResolvedBackendConfig {
   };
 }
 
+
 const cfg = getResolvedBackendConfig();
+if (!cfg.url || !cfg.publishableKey) {
+  throw new Error("Supabase configuration missing");
+}
 
 export const supabase = createClient<Database>(cfg.url, cfg.publishableKey, {
   auth: {
