@@ -35,6 +35,7 @@ import { usePresence } from "./hooks/usePresence";
 import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import type { Json } from "./integrations/supabase/types";
+import { supabase } from "./utils/supabase";
 
 /** --- TYPES --- **/
 type Column = { id: string; name: string; type: string; isPk: boolean; isFk: boolean };
@@ -2005,11 +2006,28 @@ export default function App() {
     error: cloudError,
   } = useCloudSync(userId);
 
+  // useEffect(() => {
+  //   if (!authLoading && !isAuthenticated) {
+  //     navigate('/auth');
+  //   }
+  // }, [authLoading, isAuthenticated, navigate]);
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate('/auth');
+  supabase.auth.getSession().then(({ data }) => {
+    const isRecovery =
+      data.session?.user?.aud === "authenticated" &&
+      window.location.pathname !== "/reset-password" &&
+      window.location.hash.includes("type=recovery");
+
+    if (isRecovery) {
+      navigate("/reset-password", { replace: true });
+      return;
     }
-  }, [authLoading, isAuthenticated, navigate]);
+
+    if (!authLoading && !isAuthenticated) {
+      navigate("/auth");
+    }
+  });
+}, [authLoading, isAuthenticated, navigate]);
 
   if (authLoading) {
     return (

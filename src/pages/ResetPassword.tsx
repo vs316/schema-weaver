@@ -12,6 +12,13 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+    useEffect(() => {
+  supabase.auth.getSession().then(({ data }) => {
+    if (!data.session) {
+      navigate("/auth", { replace: true });
+    }
+  });
+}, [navigate]);
 
   // Detect PASSWORD_RECOVERY session
   useEffect(() => {
