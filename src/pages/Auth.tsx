@@ -98,8 +98,9 @@ export function AuthPage() {
         }
       } else if (mode === 'forgot-password') {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth?type=recovery`,
-        });
+  redirectTo: `${window.location.origin}/reset-password`,
+});
+
 
         if (resetError) {
           setError(resetError.message);

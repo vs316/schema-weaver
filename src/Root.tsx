@@ -4,6 +4,7 @@ import { StartupErrorScreen } from "./components/StartupErrorScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { getResolvedBackendConfig } from "./integrations/supabase/safeClient";
+import ResetPassword from "./pages/ResetPassword";
 
 const App = React.lazy(() => import("./App"));
 const AuthPage = React.lazy(async () => {
@@ -79,7 +80,9 @@ export function Root() {
         >
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/*" element={<App />} />
+
           </Routes>
           <DiagnosticsPanel />
         </Suspense>
