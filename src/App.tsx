@@ -1998,6 +1998,7 @@ export default function App() {
     diagrams,
     loading: cloudLoading,
     syncing,
+    teamId,
     createDiagram,
     saveDiagram,
     deleteDiagram,
@@ -2062,6 +2063,22 @@ export default function App() {
     return null;
   }
 
+  const handleSave = async (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => {
+    if (selectedDiagram) {
+      await saveDiagram(selectedDiagram.id, updates);
+    }
+  };
+
+  const handleBack = () => {
+    setSelectedDiagram(null);
+    setShowSelector(true);
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
   // Show diagram selector
   if (showSelector && !selectedDiagram) {
     return (
@@ -2069,6 +2086,7 @@ export default function App() {
         diagrams={diagrams}
         loading={cloudLoading || !profileExists}
         error={cloudError}
+        teamId={teamId}
         onSelect={async (diagram) => {
           const loaded = await loadDiagram(diagram.id);
           if (loaded) {
@@ -2086,25 +2104,10 @@ export default function App() {
         onDelete={async (id) => {
           await deleteDiagram(id);
         }}
+        onLogout={handleLogout}
       />
     );
   }
-
-  const handleSave = async (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => {
-    if (selectedDiagram) {
-      await saveDiagram(selectedDiagram.id, updates);
-    }
-  };
-
-  const handleBack = () => {
-    setSelectedDiagram(null);
-    setShowSelector(true);
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    navigate('/auth');
-  };
 
   const appUser: AppUser = {
     id: user.id,

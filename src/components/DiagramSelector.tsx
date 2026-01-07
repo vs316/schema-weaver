@@ -8,28 +8,36 @@ import {
   Users, 
   Cloud,
   Loader2,
-  FolderOpen
+  FolderOpen,
+  Settings,
+  LogOut,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
+import { TeamManagement } from './TeamManagement';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
   loading: boolean;
   error?: string | null;
+  teamId: string | null;
   onSelect: (diagram: ERDDiagram) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onLogout: () => void;
 }
 
 export function DiagramSelector({
   diagrams,
   loading,
   error,
+  teamId,
   onSelect,
   onCreate,
   onDelete,
+  onLogout,
 }: DiagramSelectorProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showTeamSettings, setShowTeamSettings] = useState(false);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -88,6 +96,27 @@ export function DiagramSelector({
     );
   }
 
+  // Show team setup if no teamId
+  if (!teamId) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center" style={{ background: 'hsl(222 47% 4%)' }}>
+        <div className="max-w-md w-full">
+          <TeamManagement teamId={null} onTeamJoined={() => window.location.reload()} />
+          <div className="mt-4 text-center">
+            <button
+              onClick={onLogout}
+              className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors hover:bg-red-500/10"
+              style={{ color: 'hsl(0 84% 60%)' }}
+            >
+              <LogOut size={14} />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-6" style={{ background: 'hsl(222 47% 4%)' }}>
       <div className="max-w-4xl mx-auto">
@@ -103,17 +132,46 @@ export function DiagramSelector({
             </p>
           </div>
           
-          <button
-            onClick={onCreate}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 hover:scale-105"
-            style={{
-              background: 'hsl(239 84% 67%)',
-              color: 'hsl(0 0% 100%)',
-            }}
-          >
-            <Plus size={18} />
-            New Diagram
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Team Settings Button */}
+            <button
+              onClick={() => setShowTeamSettings(true)}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
+              style={{
+                background: 'hsl(222 47% 8%)',
+                border: '1px solid hsl(217 33% 17%)',
+                color: 'hsl(215 20% 65%)',
+              }}
+            >
+              <Settings size={16} />
+              Team
+            </button>
+
+            {/* New Diagram Button */}
+            <button
+              onClick={onCreate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 hover:scale-105"
+              style={{
+                background: 'hsl(239 84% 67%)',
+                color: 'hsl(0 0% 100%)',
+              }}
+            >
+              <Plus size={18} />
+              New Diagram
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
+              style={{
+                background: 'hsl(0 84% 60% / 0.1)',
+                color: 'hsl(0 84% 60%)',
+              }}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Diagrams Grid */}
@@ -264,6 +322,31 @@ export function DiagramSelector({
                   Delete
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Team Settings Modal */}
+        {showTeamSettings && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0, 0, 0, 0.7)' }}
+            onClick={() => setShowTeamSettings(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TeamManagement 
+                teamId={teamId} 
+                onClose={() => setShowTeamSettings(false)} 
+              />
             </motion.div>
           </motion.div>
         )}
