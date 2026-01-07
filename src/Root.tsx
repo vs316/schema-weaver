@@ -2,7 +2,7 @@ import React, { Suspense, useMemo } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { StartupErrorScreen } from "./components/StartupErrorScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
+// import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { getResolvedBackendConfig } from "./integrations/supabase/safeClient";
 import ResetPassword from "./pages/ResetPassword";
 
