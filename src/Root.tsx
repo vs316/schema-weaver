@@ -84,7 +84,7 @@ export function Root() {
             <Route path="/*" element={<App />} />
 
           </Routes>
-          <DiagnosticsPanel />
+          {/* <DiagnosticsPanel /> */}
         </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
