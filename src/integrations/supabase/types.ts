@@ -117,18 +117,21 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          invite_code: string
           name: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           id?: string
+          invite_code?: string
           name: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
+          invite_code?: string
           name?: string
           updated_at?: string
         }
@@ -141,6 +144,8 @@ export type Database = {
     Functions: {
       ensure_profile: { Args: never; Returns: string }
       get_user_team_id: { Args: { user_id: string }; Returns: string }
+      join_team_by_invite: { Args: { p_invite_code: string }; Returns: Json }
+      regenerate_team_invite_code: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
