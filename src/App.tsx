@@ -483,12 +483,10 @@ const selectedTableRelationships = useMemo(() => {
     if (!table || !canvasRef.current) return;
 
     if (!e.shiftKey) {
-      if (!multiSelectedTableIds.has(tableId)) {
-        setMultiSelectedTableIds(new Set([tableId]));
-      }
-      setSelectedTableId(tableId);
-      setConnectTableSearch("");
-    } else {
+  setMultiSelectedTableIds(new Set());  // ← Clear first, then set single
+  setSelectedTableId(tableId);
+  setConnectTableSearch("");
+} else {
       setMultiSelectedTableIds((prev) => {
         const next = new Set(prev);
         if (next.has(tableId)) next.delete(tableId);
@@ -565,78 +563,82 @@ const selectedTableRelationships = useMemo(() => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning) {
-      setViewport((prev) => ({
-        ...prev,
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      }));
-      return;
+  // TABLE DRAG - Check first (highest priority for user interaction)
+  if (isDragging && draggedTableId && !isPanning) {
+    const world = toWorld(e.clientX, e.clientY);
+    const anchorTable = tables.find((t) => t.id === draggedTableId);
+    if (!anchorTable) return;
+
+    let newX = world.x - dragOffset.x;
+    let newY = world.y - dragOffset.y;
+
+    if (isGridSnap) {
+      newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+      newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
     }
 
-    if (isDraggingEdge && draggedEdgeId && edgeDragStart && edgeDragStartBend) {
-      const world = toWorld(e.clientX, e.clientY);
-      const dx = world.x - edgeDragStart.x;
-      const dy = world.y - edgeDragStart.y;
+    const selectedIds = multiSelectedTableIds.size > 0 ? multiSelectedTableIds : new Set([draggedTableId]);
+    const dx = newX - anchorTable.x;
+    const dy = newY - anchorTable.y;
 
-      setRelations((prev) =>
-        prev.map((r) =>
-          r.id === draggedEdgeId
-            ? {
-                ...r,
-                bend: {
-                  x: edgeDragStartBend.x + dx,
-                  y: edgeDragStartBend.y + dy,
-                },
-              }
-            : r
-        )
-      );
-      return;
-    }
+    setTables((prev) =>
+      prev.map((t) => {
+        if (!selectedIds.has(t.id)) return t;
+        return { ...t, x: t.x + dx, y: t.y + dy };
+      })
+    );
+    return;
+  }
 
-    if (isDragging && draggedTableId) {
-      const world = toWorld(e.clientX, e.clientY);
-      const anchorTable = tables.find((t) => t.id === draggedTableId);
-      if (!anchorTable) return;
+  // EDGE BEND - Second priority
+  if (isDraggingEdge && draggedEdgeId && edgeDragStart && edgeDragStartBend && !isPanning) {
+    const world = toWorld(e.clientX, e.clientY);
+    const dx = world.x - edgeDragStart.x;
+    const dy = world.y - edgeDragStart.y;
 
-      let newX = world.x - dragOffset.x;
-      let newY = world.y - dragOffset.y;
+    setRelations((prev) =>
+      prev.map((r) =>
+        r.id === draggedEdgeId
+          ? {
+              ...r,
+              bend: {
+                x: edgeDragStartBend.x + dx,
+                y: edgeDragStartBend.y + dy,
+              },
+            }
+          : r
+      )
+    );
+    return;
+  }
 
-      if (isGridSnap) {
-        newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-        newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
-      }
+  // LASSO SELECTION - Third priority
+  if (isLassoing && lassoStart && !isPanning) {
+    const world = toWorld(e.clientX, e.clientY);
+    const x1 = lassoStart.x;
+    const y1 = lassoStart.y;
+    const x2 = world.x;
+    const y2 = world.y;
 
-      const selectedIds = multiSelectedTableIds.size > 0 ? multiSelectedTableIds : new Set([draggedTableId]);
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
 
-      const dx = newX - anchorTable.x;
-      const dy = newY - anchorTable.y;
+    setLassoRect({ x: rx, y: ry, w: rw, h: rh });
+    return;
+  }
 
-      setTables((prev) =>
-        prev.map((t) => {
-          if (!selectedIds.has(t.id)) return t;
-          return { ...t, x: t.x + dx, y: t.y + dy };
-        })
-      );
-      return;
-    }
-
-    if (isLassoing && lassoStart) {
-      const world = toWorld(e.clientX, e.clientY);
-      const x1 = lassoStart.x;
-      const y1 = lassoStart.y;
-      const x2 = world.x;
-      const y2 = world.y;
-
-      const rx = Math.min(x1, x2);
-      const ry = Math.min(y1, y2);
-      const rw = Math.abs(x2 - x1);
-      const rh = Math.abs(y2 - y1);
-
-      setLassoRect({ x: rx, y: ry, w: rw, h: rh });
-    }
-  };
+  // PAN - Lowest priority (only if nothing else is active)
+  if (isPanning) {
+    setViewport((prev) => ({
+      ...prev,
+      x: e.clientX - dragOffset.x,
+      y: e.clientY - dragOffset.y,
+    }));
+    return;
+  }
+};
 
   const finalizeLassoSelection = (shiftKey: boolean) => {
     if (!lassoRect) return;
@@ -1417,8 +1419,13 @@ const selectedTableRelationships = useMemo(() => {
           onMouseLeave={() => handleMouseUp()}
           onContextMenu={(e) => e.preventDefault()}
           onClick={(e) => {
-            if (e.target === e.currentTarget) clearAllSelections();
-          }}
+  // Don't clear selections if we just finished dragging
+  if (lastActionWasDrag.current) {
+    lastActionWasDrag.current = false;
+    return;
+  }
+  if (e.target === e.currentTarget) clearAllSelections();
+}}
           style={{
             backgroundImage: isDarkMode ? "radial-gradient(#1e293b 1px, transparent 1px)" : "radial-gradient(#cbd5e1 1px, transparent 1px)",
             backgroundSize: `${30 * viewport.zoom}px ${30 * viewport.zoom}px`,
