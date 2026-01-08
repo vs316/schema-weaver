@@ -10,6 +10,7 @@ export interface ERDDiagram {
   relations: Json;
   viewport: Json;
   is_dark_mode: boolean;
+  is_locked?: boolean;
   team_id: string | null;
   created_by: string | null;
   updated_by: string | null;
@@ -159,55 +160,56 @@ export function useCloudSync(userId?: string) {
   /* ------------------------------------------------------------------ */
 
   const createDiagram = async (name: string): Promise<ERDDiagram | null> => {
-  if (!teamId) return null;
+    if (!teamId) return null;
 
-  setSyncing(true);
+    setSyncing(true);
 
-  const { data, error } = await supabase
-    .from('erd_diagrams')
-    .insert({
-      name,
-      tables: [],
-      relations: [],
-      viewport: {},
-      is_dark_mode: false,
-      team_id: teamId,
-    })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from('erd_diagrams')
+      .insert({
+        name,
+        tables: [],
+        relations: [],
+        viewport: {},
+        is_dark_mode: false,
+        is_locked: false,
+        team_id: teamId,
+      })
+      .select()
+      .single();
 
-  setSyncing(false);
+    setSyncing(false);
 
-  if (error || !data) return null;
+    if (error || !data) return null;
 
-  setDiagrams((prev) => [data, ...prev]);
-  setCurrentDiagram(data);
+    setDiagrams((prev) => [data, ...prev]);
+    setCurrentDiagram(data);
 
-  return data;
-};
+    return data;
+  };
 
   const saveDiagram = async (
-  id: string,
-  updates: {
-    tables?: Json;
-    relations?: Json;
-    viewport?: Json;
-    is_dark_mode?: boolean;
-  }
-) => {
-  setSyncing(true);
+    id: string,
+    updates: {
+      tables?: Json;
+      relations?: Json;
+      viewport?: Json;
+      is_dark_mode?: boolean;
+      is_locked?: boolean;
+    }
+  ) => {
+    setSyncing(true);
 
-  await supabase
-    .from('erd_diagrams')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id);
+    await supabase
+      .from('erd_diagrams')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
 
-  setSyncing(false);
-};
-
+    setSyncing(false);
+  };
 
   const deleteDiagram = async (id: string) => {
     await supabase.from('erd_diagrams').delete().eq('id', id);
@@ -219,10 +221,10 @@ export function useCloudSync(userId?: string) {
   };
 
   const loadDiagram = (id: string): ERDDiagram | null => {
-  const diagram = diagrams.find((d) => d.id === id) || null;
-  setCurrentDiagram(diagram);
-  return diagram;
-};
+    const diagram = diagrams.find((d) => d.id === id) || null;
+    setCurrentDiagram(diagram);
+    return diagram;
+  };
 
   /* ------------------------------------------------------------------ */
   /* Effects                                                            */
