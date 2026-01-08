@@ -20,6 +20,8 @@ export type Database = {
           created_by: string | null
           id: string
           is_dark_mode: boolean
+          is_locked: boolean
+          locked_by: string | null
           name: string
           relations: Json
           tables: Json
@@ -33,6 +35,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_dark_mode?: boolean
+          is_locked?: boolean
+          locked_by?: string | null
           name?: string
           relations?: Json
           tables?: Json
@@ -46,6 +50,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_dark_mode?: boolean
+          is_locked?: boolean
+          locked_by?: string | null
           name?: string
           relations?: Json
           tables?: Json
@@ -113,6 +119,41 @@ export type Database = {
           },
         ]
       }
+      team_members: {
+        Row: {
+          created_at: string
+          id: string
+          role: string
+          team_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: string
+          team_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: string
+          team_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           created_at: string
@@ -143,9 +184,18 @@ export type Database = {
     }
     Functions: {
       ensure_profile: { Args: never; Returns: string }
+      get_user_role: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: string
+      }
       get_user_team_id: { Args: { user_id: string }; Returns: string }
       join_team_by_invite: { Args: { p_invite_code: string }; Returns: Json }
+      migrate_team_members: { Args: never; Returns: undefined }
       regenerate_team_invite_code: { Args: never; Returns: string }
+      update_member_role: {
+        Args: { p_member_user_id: string; p_new_role: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
