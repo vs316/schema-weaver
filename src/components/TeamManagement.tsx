@@ -9,8 +9,14 @@ import {
   X,
   Edit2,
   Save,
+  Crown,
+  Shield,
+  User,
+  Eye,
+  ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
+import type { TeamRole } from '../types/index';
 
 interface Team {
   id: string;
@@ -20,8 +26,10 @@ interface Team {
 
 interface TeamMember {
   id: string;
+  user_id: string;
   display_name: string | null;
   email: string | null;
+  role: TeamRole;
 }
 
 interface TeamManagementProps {
@@ -30,15 +38,31 @@ interface TeamManagementProps {
   onClose?: () => void;
 }
 
+const ROLE_ICONS: Record<TeamRole, React.ReactNode> = {
+  owner: <Crown size={12} className="text-amber-500" />,
+  admin: <Shield size={12} className="text-indigo-400" />,
+  member: <User size={12} className="text-slate-400" />,
+  viewer: <Eye size={12} className="text-slate-500" />,
+};
+
+const ROLE_LABELS: Record<TeamRole, string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  member: 'Member',
+  viewer: 'Viewer',
+};
+
 export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagementProps) {
   const [team, setTeam] = useState<Team | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [currentUserRole, setCurrentUserRole] = useState<TeamRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
 
   // Join team state
   const [inviteCode, setInviteCode] = useState('');
@@ -57,7 +81,10 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
     if (!teamId) return;
 
     setLoading(true);
-    
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+
     // Fetch team details
     const { data: teamData, error: teamError } = await supabase
       .from('teams')
@@ -74,14 +101,37 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
     setTeam(teamData);
     setNewName(teamData.name);
 
-    // Fetch team members
+    // Fetch team members with roles
     const { data: membersData, error: membersError } = await supabase
-      .from('profiles')
-      .select('id, display_name, email')
+      .from('team_members')
+      .select('id, user_id, role')
       .eq('team_id', teamId);
 
     if (!membersError && membersData) {
-      setMembers(membersData);
+      // Fetch profile info for each member
+      const memberIds = membersData.map(m => m.user_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .in('id', memberIds);
+
+      const enrichedMembers = membersData.map(m => {
+        const profile = profiles?.find(p => p.id === m.user_id);
+        return {
+          ...m,
+          display_name: profile?.display_name || null,
+          email: profile?.email || null,
+          role: m.role as TeamRole,
+        };
+      });
+
+      setMembers(enrichedMembers);
+
+      // Set current user's role
+      if (user) {
+        const currentMember = enrichedMembers.find(m => m.user_id === user.id);
+        setCurrentUserRole(currentMember?.role || null);
+      }
     }
 
     setLoading(false);
@@ -89,7 +139,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
 
   const copyInviteCode = async () => {
     if (!team?.invite_code) return;
-    
+
     await navigator.clipboard.writeText(team.invite_code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -97,21 +147,21 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
 
   const regenerateInviteCode = async () => {
     setRegenerating(true);
-    
+
     const { data, error } = await supabase.rpc('regenerate_team_invite_code');
-    
+
     if (!error && data) {
       setTeam(prev => prev ? { ...prev, invite_code: data } : null);
     }
-    
+
     setRegenerating(false);
   };
 
   const updateTeamName = async () => {
     if (!team || !newName.trim()) return;
-    
+
     setSaving(true);
-    
+
     const { error } = await supabase
       .from('teams')
       .update({ name: newName.trim() })
@@ -121,8 +171,28 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
       setTeam(prev => prev ? { ...prev, name: newName.trim() } : null);
       setEditingName(false);
     }
-    
+
     setSaving(false);
+  };
+
+  const updateMemberRole = async (memberUserId: string, newRole: TeamRole) => {
+    setUpdatingRole(memberUserId);
+
+    const { data, error } = await supabase.rpc('update_member_role', {
+      p_member_user_id: memberUserId,
+      p_new_role: newRole,
+    });
+
+    if (!error && data) {
+      const result = data as { success: boolean; error?: string };
+      if (result.success) {
+        setMembers(prev => prev.map(m =>
+          m.user_id === memberUserId ? { ...m, role: newRole } : m
+        ));
+      }
+    }
+
+    setUpdatingRole(null);
   };
 
   const joinTeam = async () => {
@@ -145,7 +215,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
     }
 
     const result = data as { success: boolean; error?: string; team_id?: string; team_name?: string };
-    
+
     if (!result.success) {
       setJoinError(result.error || 'Invalid invite code');
       setJoining(false);
@@ -156,6 +226,8 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
     onTeamJoined?.(result.team_id!);
     window.location.reload();
   };
+
+  const canManageMembers = currentUserRole === 'owner' || currentUserRole === 'admin';
 
   if (loading) {
     return (
@@ -168,9 +240,9 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
   // No team - show join/create options
   if (!teamId || !team) {
     return (
-      <div 
+      <div
         className="p-6 rounded-xl border"
-        style={{ 
+        style={{
           background: 'hsl(222 47% 6%)',
           borderColor: 'hsl(217 33% 17%)',
         }}
@@ -198,8 +270,8 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
                 setJoinError(null);
               }}
               placeholder="Enter invite code (e.g., a1b2c3d4)"
-              className="w-full px-4 py-3 rounded-lg border text-sm"
-              style={{ 
+              className="w-full px-4 py-3 rounded-lg border text-sm font-mono tracking-wider"
+              style={{
                 background: 'hsl(222 47% 8%)',
                 borderColor: 'hsl(217 33% 17%)',
                 color: 'hsl(210 40% 98%)',
@@ -241,9 +313,9 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
 
   // Has team - show team management
   return (
-    <div 
+    <div
       className="p-6 rounded-xl border"
-      style={{ 
+      style={{
         background: 'hsl(222 47% 6%)',
         borderColor: 'hsl(217 33% 17%)',
       }}
@@ -265,7 +337,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="px-2 py-1 rounded border text-sm font-semibold"
-                  style={{ 
+                  style={{
                     background: 'hsl(222 47% 8%)',
                     borderColor: 'hsl(217 33% 17%)',
                     color: 'hsl(210 40% 98%)',
@@ -307,13 +379,15 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
                 <h2 className="font-semibold" style={{ color: 'hsl(210 40% 98%)' }}>
                   {team.name}
                 </h2>
-                <button
-                  onClick={() => setEditingName(true)}
-                  className="p-1 rounded hover:bg-white/10"
-                  title="Edit team name"
-                >
-                  <Edit2 size={12} style={{ color: 'hsl(215 20% 65%)' }} />
-                </button>
+                {canManageMembers && (
+                  <button
+                    onClick={() => setEditingName(true)}
+                    className="p-1 rounded hover:bg-white/10"
+                    title="Edit team name"
+                  >
+                    <Edit2 size={12} style={{ color: 'hsl(215 20% 65%)' }} />
+                  </button>
+                )}
               </div>
             )}
             <p className="text-xs" style={{ color: 'hsl(215 20% 65%)' }}>
@@ -333,7 +407,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
       </div>
 
       {/* Invite Code Section */}
-      <div 
+      <div
         className="p-4 rounded-lg mb-4"
         style={{ background: 'hsl(222 47% 8%)' }}
       >
@@ -341,22 +415,24 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
           <span className="text-sm font-medium" style={{ color: 'hsl(215 20% 65%)' }}>
             Invite Code
           </span>
-          <button
-            onClick={regenerateInviteCode}
-            disabled={regenerating}
-            className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/5"
-            style={{ color: 'hsl(215 20% 65%)' }}
-            title="Generate new code"
-          >
-            <RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />
-            Regenerate
-          </button>
+          {canManageMembers && (
+            <button
+              onClick={regenerateInviteCode}
+              disabled={regenerating}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/5"
+              style={{ color: 'hsl(215 20% 65%)' }}
+              title="Generate new code"
+            >
+              <RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />
+              Regenerate
+            </button>
+          )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <code
             className="flex-1 px-3 py-2 rounded font-mono text-lg tracking-wider text-center"
-            style={{ 
+            style={{
               background: 'hsl(222 47% 4%)',
               color: 'hsl(239 84% 67%)',
             }}
@@ -366,7 +442,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
           <button
             onClick={copyInviteCode}
             className="p-2.5 rounded-lg transition-colors"
-            style={{ 
+            style={{
               background: copied ? 'hsl(142 76% 36% / 0.1)' : 'hsl(217 33% 17%)',
             }}
             title={copied ? 'Copied!' : 'Copy code'}
@@ -378,7 +454,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
             )}
           </button>
         </div>
-        
+
         <p className="text-xs mt-2" style={{ color: 'hsl(215 20% 65%)' }}>
           Share this code with others to invite them to your team
         </p>
@@ -398,8 +474,8 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
             >
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{ 
-                  background: `hsl(${Math.abs(member.id.charCodeAt(0) * 7) % 360} 70% 50%)`,
+                style={{
+                  background: `hsl(${Math.abs(member.user_id.charCodeAt(0) * 7) % 360} 70% 50%)`,
                   color: 'white',
                 }}
               >
@@ -413,6 +489,45 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
                   <p className="text-xs truncate" style={{ color: 'hsl(215 20% 65%)' }}>
                     {member.email}
                   </p>
+                )}
+              </div>
+
+              {/* Role badge/selector */}
+              <div className="flex items-center gap-1">
+                {ROLE_ICONS[member.role]}
+                {canManageMembers && member.role !== 'owner' ? (
+                  <div className="relative">
+                    <select
+                      value={member.role}
+                      onChange={(e) => updateMemberRole(member.user_id, e.target.value as TeamRole)}
+                      disabled={updatingRole === member.user_id}
+                      className="appearance-none px-2 py-1 pr-6 rounded text-xs font-medium cursor-pointer"
+                      style={{
+                        background: 'hsl(222 47% 6%)',
+                        color: 'hsl(210 40% 98%)',
+                        border: '1px solid hsl(217 33% 17%)',
+                      }}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                    <ChevronDown
+                      size={12}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                      style={{ color: 'hsl(215 20% 65%)' }}
+                    />
+                  </div>
+                ) : (
+                  <span
+                    className="text-xs font-medium px-2 py-1 rounded"
+                    style={{
+                      background: 'hsl(222 47% 6%)',
+                      color: 'hsl(210 40% 98%)',
+                    }}
+                  >
+                    {ROLE_LABELS[member.role]}
+                  </span>
                 )}
               </div>
             </div>
@@ -456,7 +571,7 @@ export function TeamBadge({ teamId, onClick }: TeamBadgeProps) {
     <button
       onClick={onClick}
       className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors hover:bg-white/5"
-      style={{ 
+      style={{
         background: 'hsl(222 47% 8%)',
         border: '1px solid hsl(217 33% 17%)',
       }}

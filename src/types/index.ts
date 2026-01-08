@@ -6,6 +6,14 @@ export type Column = {
   isFk: boolean;
 };
 
+export type TableComment = {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt: string;
+};
+
 export type Table = {
   id: string;
   name: string;
@@ -13,7 +21,20 @@ export type Table = {
   y: number;
   columns: Column[];
   color?: string;
+  description?: string;
+  comments?: TableComment[];
 };
+
+export type TeamRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export interface TeamMember {
+  id: string;
+  user_id: string;
+  team_id: string;
+  role: TeamRole;
+  display_name?: string;
+  email?: string;
+}
 
 export type Relation = {
   id: string;

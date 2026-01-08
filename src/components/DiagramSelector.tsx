@@ -11,9 +11,11 @@ import {
   FolderOpen,
   Settings,
   LogOut,
+  UserPlus,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
+import { JoinTeamModal } from './JoinTeamModal';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -38,6 +40,7 @@ export function DiagramSelector({
 }: DiagramSelectorProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showJoinTeam, setShowJoinTeam] = useState(false);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -133,6 +136,20 @@ export function DiagramSelector({
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Join Team Button */}
+            <button
+              onClick={() => setShowJoinTeam(true)}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
+              style={{
+                background: 'hsl(142 76% 36% / 0.1)',
+                border: '1px solid hsl(142 76% 36% / 0.3)',
+                color: 'hsl(142 76% 36%)',
+              }}
+            >
+              <UserPlus size={16} />
+              Join Team
+            </button>
+
             {/* Team Settings Button */}
             <button
               onClick={() => setShowTeamSettings(true)}
@@ -349,6 +366,14 @@ export function DiagramSelector({
               />
             </motion.div>
           </motion.div>
+        )}
+
+        {/* Join Team Modal */}
+        {showJoinTeam && (
+          <JoinTeamModal
+            onClose={() => setShowJoinTeam(false)}
+            onSuccess={() => window.location.reload()}
+          />
         )}
       </AnimatePresence>
     </div>
