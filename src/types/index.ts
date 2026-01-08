@@ -10,8 +10,12 @@ export type TableComment = {
   id: string;
   userId: string;
   userName: string;
+  user_email?: string;
   text: string;
   createdAt: string;
+  content?: string;
+  author_id?: string;
+  author_email?: string;
 };
 
 export type Table = {
