@@ -49,7 +49,16 @@ import { supabase } from "./utils/supabase";
 
 /** --- TYPES --- **/
 type Column = { id: string; name: string; type: string; isPk: boolean; isFk: boolean };
-type Table = { id: string; name: string; x: number; y: number; columns: Column[]; color?: string };
+type Table = { 
+  id: string; 
+  name: string; 
+  x: number; 
+  y: number; 
+  columns: Column[]; 
+  color?: string;
+  description?: string;  // ← ADD THIS LINE
+};
+
 
 type Relation = {
   id: string;
@@ -190,7 +199,7 @@ function ERDBuilder({
   const historyRef = useRef<Snapshot[]>([]);
   const historyIndexRef = useRef<number>(-1);
   // Feature 1: Lock/Unlock diagram
-const [isLocked, setIsLocked] = useState(diagram?.is_locked ?? false);
+const [isLocked, setIsLocked] = useState((diagram as any)?.is_locked ?? false);
 
 // Feature 4: Comments
 const { 
@@ -204,7 +213,7 @@ const {
   user.id
 );
 const [newCommentText, setNewCommentText] = useState("");
-const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+// const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 
 // Feature 5: Sample Data
 const [sampleDataShown, setSampleDataShown] = useState(false);
@@ -711,6 +720,11 @@ const selectedTableRelationships = useMemo(() => {
   }, [isLocked, viewport, pushHistory, push]);
 
   const duplicateTable = useCallback((sourceId: string) => {
+     // Lock check - prevents duplicate when locked
+  if (isLocked) {
+    push({ title: "Diagram is locked", type: "info" });
+    return;
+  }
     setTables((prev) => {
       const src = prev.find((t) => t.id === sourceId);
       if (!src) return prev;
@@ -1077,7 +1091,8 @@ const selectedTableRelationships = useMemo(() => {
   e.preventDefault();
   const newLockState = !isLocked;
   setIsLocked(newLockState);
-  onSave({ is_locked: newLockState });
+  onSave({ is_locked: newLockState } as any);
+
   push({ 
     title: `Diagram ${newLockState ? "locked" : "unlocked"}`, 
     type: "info" 
@@ -1243,7 +1258,8 @@ const selectedTableRelationships = useMemo(() => {
   onClick={() => {
     const newLockState = !isLocked;
     setIsLocked(newLockState);
-    onSave({ is_locked: newLockState });
+    onSave({ is_locked: newLockState } as any);
+
     push({
       title: `Diagram ${newLockState ? "locked" : "unlocked"}`,
       description: newLockState ? "Ctrl+L to unlock" : "Ctrl+L to lock",

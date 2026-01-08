@@ -15,10 +15,10 @@ const lastNames = [
   "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White"
 ];
 
-const companies = [
-  "Acme Corp", "TechFlow", "DataSys", "CloudWorks", "NetVision", "ByteLabs",
-  "QuantumDev", "SynergyAI", "NovaTech", "InnovatePro", "VelocityIO", "ApexSoft"
-];
+// const companies = [
+//   "Acme Corp", "TechFlow", "DataSys", "CloudWorks", "NetVision", "ByteLabs",
+//   "QuantumDev", "SynergyAI", "NovaTech", "InnovatePro", "VelocityIO", "ApexSoft"
+// ];
 
 const domains = [
   "example.com", "tech.io", "company.net", "startup.co", "business.org", "service.dev",
@@ -113,12 +113,12 @@ export function formatSampleDataForDisplay(
 }
 
 export function sampleDataToJSON(
-  tableName: string,
-  columns: Column[],
+  _tableName: string,
+  _columns: Column[],
   rows: Array<Record<string, string | number | boolean>>
 ): string {
   return JSON.stringify({
-    table: tableName,
+    table: _tableName,
     data: rows
   }, null, 2);
 }
