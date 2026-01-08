@@ -14,7 +14,6 @@ import {
   Download,
   Sun,
   Moon,
-  MousePointer2,
   Upload,
   CheckCircle2,
   Maximize,
@@ -24,7 +23,6 @@ import {
   Copy,
   Undo2,
   Grid3x3,
-  Palette,
   FileText,
   Cloud,
   ArrowLeft,
@@ -32,12 +30,10 @@ import {
   Lock,           // ADD THIS
   Unlock,         // ADD THIS
   MessageSquare,  // ADD THIS for comments
-  Zap,           // ADD THIS for sample data
 } from "lucide-react";
 
 // Add these utility imports:
 import { useTableComments } from "./hooks/useTableComments";
-import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
 import html2canvas from "html2canvas";
 import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
@@ -45,7 +41,6 @@ import { usePresence } from "./hooks/usePresence";
 import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import type { Json } from "./integrations/supabase/types";
-import { supabase } from "./utils/supabase";
 
 /** --- TYPES --- **/
 type Column = { id: string; name: string; type: string; isPk: boolean; isFk: boolean };
@@ -132,7 +127,7 @@ function ERDBuilder({
 }: { 
   user: AppUser;
   diagram: ERDDiagram | null;
-  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => void;
+  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean; is_locked?: boolean }) => void;
   onBack: () => void;
   syncing: boolean;
   onLogout: () => void;
@@ -171,7 +166,6 @@ function ERDBuilder({
   // Store drag positions in refs for instant visual feedback without setState
   const dragPreviewRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const edgeBendPreviewRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const rafIdRef = useRef<number | null>(null);
   const dragStartTablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   const toWorld = (clientX: number, clientY: number) => {
@@ -220,11 +214,6 @@ const {
   user.id
 );
 const [newCommentText, setNewCommentText] = useState("");
-// const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-
-// Feature 5: Sample Data
-const [sampleDataShown, setSampleDataShown] = useState(false);
-const [sampleData, setSampleData] = useState<any[]>([]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -802,7 +791,7 @@ const selectedTableRelationships = useMemo(() => {
     });
     pushHistory();
     push({ title: "Table duplicated", type: "success" });
-  }, [pushHistory, push]);
+  }, [isLocked, pushHistory, push]);
 
   const toggleRelation = useCallback((sourceId: string, targetId: string) => {
      // Feature 1: Check lock
@@ -832,7 +821,7 @@ const selectedTableRelationships = useMemo(() => {
       }
     });
     pushHistory();
-  }, [isLocked,pushHistory, push]);
+  }, [isLocked, pushHistory, push]);
 
   const exportJSON = useCallback(() => {
     const data = JSON.stringify({ tables, relations });
@@ -1186,102 +1175,6 @@ const selectedTableRelationships = useMemo(() => {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push]);
-
-  // --- SCHEMA TEMPLATES ---
-  const templates: { name: string; apply: () => void }[] = [
-    {
-      name: "Blog (Users, Posts)",
-      apply: () => {
-        const userT: Table = {
-          id: generateId(),
-          name: "users",
-          x: 200,
-          y: 120,
-          color: "#60a5fa",
-          columns: [
-            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
-            { id: generateId(), name: "email", type: "VARCHAR", isPk: false, isFk: false },
-            { id: generateId(), name: "name", type: "VARCHAR", isPk: false, isFk: false },
-          ],
-        };
-        const postT: Table = {
-          id: generateId(),
-          name: "posts",
-          x: 500,
-          y: 220,
-          color: "#34d399",
-          columns: [
-            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
-            { id: generateId(), name: "title", type: "VARCHAR", isPk: false, isFk: false },
-            { id: generateId(), name: "content", type: "TEXT", isPk: false, isFk: false },
-            { id: generateId(), name: "user_id", type: "INT", isPk: false, isFk: true },
-          ],
-        };
-        const rel: Relation = {
-          id: generateId(),
-          sourceTableId: postT.id,
-          targetTableId: userT.id,
-          label: "user_id",
-          isDashed: false,
-          lineType: "curved",
-          bend: { x: 0, y: 0 },
-        };
-        setTables((prev) => [...prev, userT, postT]);
-        setRelations((prev) => [...prev, rel]);
-        pushHistory();
-        push({ title: "Template applied", description: "Blog schema", type: "success" });
-      },
-    },
-    {
-      name: "Store (Products, Orders, Order_Items)",
-      apply: () => {
-        const products: Table = {
-          id: generateId(),
-          name: "products",
-          x: 220,
-          y: 120,
-          color: "#f59e0b",
-          columns: [
-            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
-            { id: generateId(), name: "name", type: "VARCHAR", isPk: false, isFk: false },
-            { id: generateId(), name: "price", type: "INT", isPk: false, isFk: false },
-          ],
-        };
-        const orders: Table = {
-          id: generateId(),
-          name: "orders",
-          x: 520,
-          y: 140,
-          color: "#22c55e",
-          columns: [
-            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
-            { id: generateId(), name: "customer_name", type: "VARCHAR", isPk: false, isFk: false },
-          ],
-        };
-        const orderItems: Table = {
-          id: generateId(),
-          name: "order_items",
-          x: 420,
-          y: 320,
-          color: "#a78bfa",
-          columns: [
-            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
-            { id: generateId(), name: "order_id", type: "INT", isPk: false, isFk: true },
-            { id: generateId(), name: "product_id", type: "INT", isPk: false, isFk: true },
-            { id: generateId(), name: "qty", type: "INT", isPk: false, isFk: false },
-          ],
-        };
-        const rels: Relation[] = [
-          { id: generateId(), sourceTableId: orderItems.id, targetTableId: orders.id, label: "order_id", isDashed: false, lineType: "curved", bend: { x: 0, y: 0 } },
-          { id: generateId(), sourceTableId: orderItems.id, targetTableId: products.id, label: "product_id", isDashed: false, lineType: "curved", bend: { x: 0, y: 0 } },
-        ];
-        setTables((prev) => [...prev, products, orders, orderItems]);
-        setRelations((prev) => [...prev, ...rels]);
-        pushHistory();
-        push({ title: "Template applied", description: "Store schema", type: "success" });
-      },
-    },
-  ];
 
   // --- RENDER ---
   return (
@@ -2364,7 +2257,7 @@ export default function App() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(null);
-  const { diagrams, currentDiagram, saveChanges, createNewDiagram, loading: syncLoading, syncing } = useCloudSync(user?.id ?? null);
+  const { diagrams, currentDiagram, setCurrentDiagram, loading: syncLoading, syncing } = useCloudSync(user?.id);
 
   if (loading) {
     return (
@@ -2381,13 +2274,41 @@ export default function App() {
     return null;
   }
 
+  const handleSave = (updates: any) => {
+    if (currentDiagram) {
+      setCurrentDiagram({ ...currentDiagram, ...updates });
+    }
+  };
+
+  const handleSelectDiagram = (diagram: ERDDiagram) => {
+    setCurrentDiagram(diagram);
+    setSelectedDiagramId(diagram.id);
+  };
+
+  const handleCreateDiagram = async () => {
+    const newDiagram: ERDDiagram = {
+      id: generateId(),
+      name: "New Diagram",
+      tables: [],
+      relations: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      is_dark_mode: true,
+      is_locked: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setCurrentDiagram(newDiagram);
+    setSelectedDiagramId(newDiagram.id);
+  };
+
   return selectedDiagramId && currentDiagram ? (
     <ERDBuilder
       user={user}
       diagram={currentDiagram}
-      onSave={saveChanges}
+      onSave={handleSave}
       onBack={() => {
         setSelectedDiagramId(null);
+        setCurrentDiagram(null);
       }}
       syncing={syncing}
       onLogout={() => {
@@ -2397,10 +2318,9 @@ export default function App() {
     />
   ) : (
     <DiagramSelector
-      user={user}
       diagrams={diagrams}
-      onSelect={(id) => setSelectedDiagramId(id)}
-      onCreate={createNewDiagram}
+      onSelect={handleSelectDiagram}
+      onCreate={handleCreateDiagram}
       onLogout={() => navigate("/auth")}
       loading={syncLoading}
     />
