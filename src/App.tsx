@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
+// Add these to your existing lucide-react import:
 import {
   Plus,
   X,
@@ -28,7 +29,16 @@ import {
   Cloud,
   ArrowLeft,
   Loader2,
+  Lock,           // ADD THIS
+  Unlock,         // ADD THIS
+  MessageSquare,  // ADD THIS for comments
+  Zap,           // ADD THIS for sample data
 } from "lucide-react";
+
+// Add these utility imports:
+import { useTableComments } from "./hooks/useTableComments";
+import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
+
 import html2canvas from "html2canvas";
 import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
 import { usePresence } from "./hooks/usePresence";
@@ -119,6 +129,7 @@ function ERDBuilder({
   onLogout: () => void;
 }) {
   // --- STATE ---
+  
   const [tables, setTables] = useState<Table[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -178,6 +189,26 @@ function ERDBuilder({
   const lastActionWasDrag = useRef<boolean>(false);
   const historyRef = useRef<Snapshot[]>([]);
   const historyIndexRef = useRef<number>(-1);
+  // Feature 1: Lock/Unlock diagram
+const [isLocked, setIsLocked] = useState(diagram?.is_locked ?? false);
+
+// Feature 4: Comments
+const { 
+  comments, 
+  loading: commentsLoading, 
+  addComment, 
+  deleteComment 
+} = useTableComments(
+  diagram?.id ?? null,
+  selectedTableId,
+  user.id
+);
+const [newCommentText, setNewCommentText] = useState("");
+const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+
+// Feature 5: Sample Data
+const [sampleDataShown, setSampleDataShown] = useState(false);
+const [sampleData, setSampleData] = useState<any[]>([]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -410,12 +441,32 @@ function ERDBuilder({
 
     return { connectedTableIds, connectedEdgeIds };
   }, [relations, activeSelectedTableIds]);
+  // Feature 2: Get relationships for selected table, sorted by priority
+const selectedTableRelationships = useMemo(() => {
+  if (!selectedTableId) return [];
+  
+  const related = relations.filter(
+    r => r.sourceTableId === selectedTableId || r.targetTableId === selectedTableId
+  );
+  
+  // Sort: relationships FROM selected table first, then TO it
+  return related.sort((a, b) => {
+    const aFromSelected = a.sourceTableId === selectedTableId ? 0 : 1;
+    const bFromSelected = b.sourceTableId === selectedTableId ? 0 : 1;
+    return aFromSelected - bFromSelected;
+  });
+}, [relations, selectedTableId]);
 
   const isTablePrimarySelected = (id: string) => activeSelectedTableIds.has(id);
   const isTableConnected = (id: string) => connected.connectedTableIds.has(id);
   const isEdgeConnected = (id: string) => connected.connectedEdgeIds.has(id);
 
   const handleTableMouseDown = (e: React.MouseEvent, tableId: string) => {
+    // Feature 1: Check if locked
+  if (isLocked) {
+    push({ title: "Diagram is locked", description: "Unlock to edit", type: "info" });
+    return;
+  }
     if (e.button !== 0) return;
     e.stopPropagation();
 
@@ -638,6 +689,11 @@ function ERDBuilder({
   };
 
   const addTable = useCallback(() => {
+    // Feature 1: Check lock
+  if (isLocked) {
+    push({ title: "Diagram is locked", type: "info" });
+    return;
+  }
     const newTable: Table = {
       id: generateId(),
       name: "New_Table",
@@ -652,7 +708,7 @@ function ERDBuilder({
     setMultiSelectedTableIds(new Set([newTable.id]));
     pushHistory();
     push({ title: "Table added", type: "success" });
-  }, [viewport, pushHistory, push]);
+  }, [isLocked, viewport, pushHistory, push]);
 
   const duplicateTable = useCallback((sourceId: string) => {
     setTables((prev) => {
@@ -676,6 +732,11 @@ function ERDBuilder({
   }, [pushHistory, push]);
 
   const toggleRelation = useCallback((sourceId: string, targetId: string) => {
+     // Feature 1: Check lock
+  if (isLocked) {
+    push({ title: "Diagram is locked", type: "info" });
+    return;
+  }
     if (sourceId === targetId) return;
     setRelations((prev) => {
       const existing = prev.find((r) => r.sourceTableId === sourceId && r.targetTableId === targetId);
@@ -698,7 +759,7 @@ function ERDBuilder({
       }
     });
     pushHistory();
-  }, [pushHistory, push]);
+  }, [isLocked,pushHistory, push]);
 
   const exportJSON = useCallback(() => {
     const data = JSON.stringify({ tables, relations });
@@ -712,6 +773,11 @@ function ERDBuilder({
   }, [tables, relations, push]);
 
   const importJSON = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+     // Feature 1: Check lock
+  if (isLocked) {
+    push({ title: "Diagram is locked", type: "info" });
+    return;
+  }
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -736,7 +802,7 @@ function ERDBuilder({
       }
     };
     reader.readAsText(file);
-  }, [viewport, pushHistory, push]);
+  }, [isLocked, viewport, pushHistory, push]);
 
   const exportPNG = useCallback(async () => {
     if (!canvasRef.current) return;
@@ -1007,7 +1073,20 @@ function ERDBuilder({
       } else if (ctrlOrCmd && e.key.toLowerCase() === "d") {
         e.preventDefault();
         if (selectedTableId) duplicateTable(selectedTableId);
-      } else if (e.key === "Delete" || e.key === "Backspace") {
+      }else if (ctrlOrCmd && e.key.toLowerCase() === "l") {
+  e.preventDefault();
+  const newLockState = !isLocked;
+  setIsLocked(newLockState);
+  onSave({ is_locked: newLockState });
+  push({ 
+    title: `Diagram ${newLockState ? "locked" : "unlocked"}`, 
+    type: "info" 
+  });
+} else if (e.key === "Delete" || e.key === "Backspace") {
+   if (isLocked) {
+    push({ title: "Diagram is locked", type: "info" });
+    return;
+  }
         // Delete selected table/edge
         if (selectedTableId) {
           const tId = selectedTableId;
@@ -1151,6 +1230,7 @@ function ERDBuilder({
           >
             <Undo2 size={16} />
           </button>
+
           {/* <button
             onClick={redo}
             title="Redo (Ctrl+Shift+Z / Ctrl+Y)"
@@ -1158,7 +1238,33 @@ function ERDBuilder({
           >
             <Redo2 size={16} />
           </button> */}
-          <span className="mx-2 opacity-30">|</span>
+          {/* Feature 1: Lock/Unlock Button */}
+<button
+  onClick={() => {
+    const newLockState = !isLocked;
+    setIsLocked(newLockState);
+    onSave({ is_locked: newLockState });
+    push({
+      title: `Diagram ${newLockState ? "locked" : "unlocked"}`,
+      description: newLockState ? "Ctrl+L to unlock" : "Ctrl+L to lock",
+      type: "info"
+    });
+  }}
+  title={isLocked ? "Unlock diagram (Ctrl/Cmd+L)" : "Lock diagram (Ctrl/Cmd+L)"}
+  className={`p-2 rounded-lg transition-all ${
+    isLocked
+      ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
+      : isDarkMode
+      ? "hover:bg-slate-800 text-slate-300"
+      : "hover:bg-slate-200 text-slate-700"
+  }`}
+>
+  {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
+</button>
+
+<span className="mx-2 opacity-30">|</span>
+
+          
           
           {/* Presence Indicator */}
           <PresenceIndicator 
@@ -1588,253 +1694,518 @@ function ERDBuilder({
               (() => {
                 const t = tables.find((x) => x.id === selectedTableId)!;
                 return (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="space-y-2">
-                      <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                        Table name
-                      </label>
-                      <input
-                        className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none border transition-all duration-200 ${
-                          isDarkMode
-                            ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
-                            : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
-                        }`}
-                        value={t.name}
-                        onChange={(e) =>
-                          setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))
-                        }
-                        onBlur={() => pushHistory()}
-                      />
-                    </div>
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+        {/* Table Name */}
+        <div className="space-y-2">
+          <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Table name
+          </label>
+          <input
+            className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none border transition-all duration-200 ${
+              isDarkMode
+                ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
+                : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
+            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            value={t.name}
+            onChange={(e) => !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))}
+            onBlur={() => pushHistory()}
+            disabled={isLocked}
+          />
+        </div>
 
-                    <div className="space-y-2">
-                      <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                        Color
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-6 h-6 rounded-md border cursor-pointer"
-                          style={{ background: t.color || "#64748b" }}
-                          title="Current color"
-                        />
-                        <div className="flex items-center gap-2">
-                          {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444"].map((c) => (
-                            <button
-                              key={c}
-                              className="w-6 h-6 rounded-md border hover:scale-105 transition-transform"
-                              style={{ background: c }}
-                              onClick={() => {
-                                setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
-                                pushHistory();
-                              }}
-                              title="Set color"
-                            />
-                          ))}
-                        </div>
-                        <Palette size={14} className="opacity-40" />
-                      </div>
-                    </div>
+        {/* Feature 3: Description */}
+        <div className="space-y-2">
+          <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Description (optional)
+          </label>
+          <textarea
+            className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none border transition-all duration-200 resize-none ${
+              isDarkMode
+                ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
+                : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
+            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            rows={3}
+            placeholder="Add notes about this table..."
+            value={t.description || ""}
+            onChange={(e) => !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
+            onBlur={() => pushHistory()}
+            disabled={isLocked}
+          />
+          {t.description && (
+            <div className={`text-[9px] opacity-75 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
+              {t.description.length} characters
+            </div>
+          )}
+        </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                          Columns
-                        </label>
-                        <button
-                          onClick={() =>
-                            setTables((prev) =>
-                              prev.map((x) =>
-                                x.id === t.id
-                                  ? {
-                                      ...x,
-                                      columns: [
-                                        ...x.columns,
-                                        { id: generateId(), name: "new_col", type: "VARCHAR", isPk: false, isFk: false },
-                                      ],
-                                    }
-                                  : x
-                              )
-                            )
+        {/* Color Picker */}
+        <div className="space-y-2">
+          <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Color
+          </label>
+          <div className="flex items-center gap-2">
+            <div
+              className="w-6 h-6 rounded-md border cursor-pointer"
+              style={{ background: t.color || "#64748b" }}
+              title="Current color"
+            />
+            <div className="flex items-center gap-2">
+              {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444"].map((c) => (
+                <button
+                  key={c}
+                  className={`w-6 h-6 rounded-md border hover:scale-105 transition-transform ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                  style={{ background: c }}
+                  onClick={() => {
+                    if (!isLocked) {
+                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
+                      pushHistory();
+                    }
+                  }}
+                  disabled={isLocked}
+                  title="Set color"
+                />
+              ))}
+            </div>
+            <Palette size={14} className="opacity-40" />
+          </div>
+        </div>
+
+        {/* Columns */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              Columns
+            </label>
+            <button
+              onClick={() => {
+                if (!isLocked) {
+                  setTables((prev) =>
+                    prev.map((x) =>
+                      x.id === t.id
+                        ? {
+                            ...x,
+                            columns: [
+                              ...x.columns,
+                              { id: generateId(), name: "new_col", type: "VARCHAR", isPk: false, isFk: false },
+                            ],
                           }
-                          className="text-indigo-500 text-[10px] font-bold hover:underline hover:text-indigo-600 transition-colors duration-200"
-                          onMouseUp={() => pushHistory()}
-                        >
-                          + Add column
-                        </button>
-                      </div>
+                        : x
+                    )
+                  );
+                }
+              }}
+              disabled={isLocked}
+              className={`text-indigo-500 text-[10px] font-bold hover:underline hover:text-indigo-600 transition-colors duration-200 ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+              onMouseUp={() => pushHistory()}
+            >
+              + Add column
+            </button>
+          </div>
 
-                      {t.columns.map((col) => (
-                        <div
-                          key={col.id}
-                          className={`p-3 rounded-xl border space-y-2 transition-all duration-200 ${
-                            isDarkMode ? "bg-slate-950 border-slate-700 hover:bg-slate-900 hover:border-slate-600" : "bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-300"
-                          }`}
-                        >
-                          <div className="flex gap-2">
-                            <input
-                              className={`bg-transparent text-xs w-full outline-none font-bold transition-colors duration-200 ${
-                                isDarkMode ? "text-slate-100" : "text-slate-900"
-                              }`}
-                              value={col.name}
-                              onChange={(e) =>
-                                setTables((prev) =>
-                                  prev.map((x) =>
-                                    x.id === t.id
-                                      ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, name: e.target.value } : c)) }
-                                      : x
-                                  )
-                                )
-                              }
-                              onBlur={() => pushHistory()}
-                            />
-                            <button
-                              className={`transition-colors duration-200 ${isDarkMode ? "text-slate-500 hover:text-red-500" : "text-slate-600 hover:text-red-600"}`}
-                              onClick={() =>
-                                setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, columns: x.columns.filter((c) => c.id !== col.id) } : x)))
-                              }
-                              onMouseUp={() => pushHistory()}
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
+          {t.columns.map((col) => (
+            <div
+              key={col.id}
+              className={`p-3 rounded-xl border space-y-2 transition-all duration-200 ${
+                isDarkMode ? "bg-slate-950 border-slate-700 hover:bg-slate-900 hover:border-slate-600" : "bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-300"
+              } ${isLocked ? "opacity-60" : ""}`}
+            >
+              <div className="flex gap-2">
+                <input
+                  className={`bg-transparent text-xs w-full outline-none font-bold transition-colors duration-200 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  } ${isLocked ? "cursor-not-allowed" : ""}`}
+                  value={col.name}
+                  onChange={(e) =>
+                    !isLocked && setTables((prev) =>
+                      prev.map((x) =>
+                        x.id === t.id
+                          ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, name: e.target.value } : c)) }
+                          : x
+                      )
+                    )
+                  }
+                  onBlur={() => pushHistory()}
+                  disabled={isLocked}
+                />
+                <button
+                  className={`transition-colors duration-200 ${isDarkMode ? "text-slate-500 hover:text-red-500" : "text-slate-600 hover:text-red-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    if (!isLocked) {
+                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, columns: x.columns.filter((c) => c.id !== col.id) } : x)));
+                    }
+                  }}
+                  disabled={isLocked}
+                  onMouseUp={() => pushHistory()}
+                >
+                  <X size={14} />
+                </button>
+              </div>
 
-                          <div className="flex gap-3">
-                            <label className="flex items-center text-[10px] gap-1 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={col.isPk}
-                                onChange={(e) =>
-                                  setTables((prev) =>
-                                    prev.map((x) =>
-                                      x.id === t.id
-                                        ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
-                                        : x
-                                    )
-                                  )
-                                }
-                                onMouseUp={() => pushHistory()}
-                              />{" "}
-                              PK
-                            </label>
+              <div className="flex gap-3">
+                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={col.isPk}
+                    onChange={(e) =>
+                      !isLocked && setTables((prev) =>
+                        prev.map((x) =>
+                          x.id === t.id
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
+                            : x
+                        )
+                      )
+                    }
+                    disabled={isLocked}
+                    onMouseUp={() => pushHistory()}
+                  />{" "}
+                  PK
+                </label>
 
-                            <label className="flex items-center text-[10px] gap-1 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={col.isFk}
-                                onChange={(e) =>
-                                  setTables((prev) =>
-                                    prev.map((x) =>
-                                      x.id === t.id
-                                        ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: e.target.checked } : c)) }
-                                        : x
-                                    )
-                                  )
-                                }
-                                onMouseUp={() => pushHistory()}
-                              />{" "}
-                              FK
-                            </label>
+                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={col.isFk}
+                    onChange={(e) =>
+                      !isLocked && setTables((prev) =>
+                        prev.map((x) =>
+                          x.id === t.id
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: e.target.checked } : c)) }
+                            : x
+                        )
+                      )
+                    }
+                    disabled={isLocked}
+                    onMouseUp={() => pushHistory()}
+                  />{" "}
+                  FK
+                </label>
 
-                            <select
-                              className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}
-                              value={col.type}
-                              onChange={(e) =>
-                                setTables((prev) =>
-                                  prev.map((x) =>
-                                    x.id === t.id
-                                      ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, type: e.target.value } : c)) }
-                                      : x
-                                  )
-                                )
-                              }
-                              onMouseUp={() => pushHistory()}
-                            >
-                              <option>INT</option>
-                              <option>UUID</option>
-                              <option>VARCHAR</option>
-                              <option>TEXT</option>
-                              <option>BOOL</option>
-                            </select>
-                          </div>
-                        </div>
-                      ))}
+                <select
+                  className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  value={col.type}
+                  onChange={(e) =>
+                    !isLocked && setTables((prev) =>
+                      prev.map((x) =>
+                        x.id === t.id
+                          ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, type: e.target.value } : c)) }
+                          : x
+                      )
+                    )
+                  }
+                  disabled={isLocked}
+                  onMouseUp={() => pushHistory()}
+                >
+                  <option>INT</option>
+                  <option>UUID</option>
+                  <option>VARCHAR</option>
+                  <option>TEXT</option>
+                  <option>BOOL</option>
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Feature 2: Relationships Section */}
+        {selectedTableRelationships.length > 0 && (
+          <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+            <label className={`text-[10px] font-bold uppercase block mb-2 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              {selectedTableRelationships.length} Relationship{selectedTableRelationships.length !== 1 ? "s" : ""}
+            </label>
+            <div className="space-y-2 mb-4">
+              {selectedTableRelationships.map((r) => {
+                const isSource = r.sourceTableId === selectedTableId;
+                const targetId = isSource ? r.targetTableId : r.sourceTableId;
+                const targetTable = tables.find(t => t.id === targetId);
+                
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => setSelectedEdgeId(r.id)}
+                    className={`p-2 rounded-lg text-xs cursor-pointer border transition-all ${
+                      selectedEdgeId === r.id
+                        ? "bg-indigo-500/20 border-indigo-500 text-indigo-300"
+                        : isDarkMode 
+                          ? "border-indigo-700/50 text-indigo-300 hover:bg-indigo-900/30 hover:border-indigo-600"
+                          : "border-indigo-300/50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400"
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1">
+                      {isSource ? "→" : "←"} {targetTable?.name || "Unknown"}
                     </div>
-
-                    <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-                      <label className={`text-[10px] font-bold uppercase block mb-3 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                        Connect to table
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Search tables..."
-                        value={connectTableSearch}
-                        onChange={(e) => setConnectTableSearch(e.target.value)}
-                        className={`w-full px-3 py-2 rounded-lg text-xs mb-3 border outline-none transition-all duration-200 ${
-                          isDarkMode
-                            ? "bg-slate-900 border-slate-700 text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                            : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                        }`}
-                      />
-                      <div className="grid grid-cols-1 gap-2">
-                        {tables
-                          .filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase()))
-                          .map((target) => {
-                            const isLinked = relations.some(
-                              (r) =>
-                                (r.sourceTableId === t.id && r.targetTableId === target.id) ||
-                                (r.sourceTableId === target.id && r.targetTableId === t.id)
-                            );
-                            return (
-                              <button
-                                key={target.id}
-                                onClick={() => toggleRelation(t.id, target.id)}
-                                className={`text-left px-3 py-2 rounded-lg text-xs border transition-all duration-200 ${
-                                  isLinked
-                                    ? isDarkMode
-                                      ? "bg-indigo-900/40 border-indigo-600 text-indigo-200 hover:bg-indigo-900/60"
-                                      : "bg-indigo-100 border-indigo-400 text-indigo-900 hover:bg-indigo-200"
-                                    : isDarkMode
-                                    ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600"
-                                    : "border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400"
-                                }`}
-                              >
-                                {isLinked ? "✓ " : ""}Link to {target.name}
-                              </button>
-                            );
-                          })}
-                        {tables.filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase())).length === 0 && (
-                          <div className={`text-xs py-3 text-center transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                            {connectTableSearch.length > 0 ? "No tables found" : "No other tables available"}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => duplicateTable(t.id)}
-                        className="flex-1 py-2 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white transition-all duration-200"
-                      >
-                        Duplicate table
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTables(tables.filter((x) => x.id !== t.id));
-                          setRelations(relations.filter((r) => r.sourceTableId !== t.id && r.targetTableId !== t.id));
-                          setSelectedTableId(null);
-                          setMultiSelectedTableIds(new Set());
-                          pushHistory();
-                          push({ title: "Table deleted", type: "info" });
-                        }}
-                        className="flex-1 py-2 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg hover:bg-red-500 hover:text-white transition-all duration-200"
-                      >
-                        Delete table
-                      </button>
+                    {r.label && <div className="text-[9px] opacity-75 mt-1">FK: {r.label}</div>}
+                    <div className="text-[8px] opacity-50 mt-1">
+                      {r.lineType === "curved" ? "Curved" : "Straight"} {r.isDashed ? "• Dashed" : ""}
                     </div>
                   </div>
                 );
-              })()
-            ) : selectedEdgeId ? (
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Connect to table */}
+        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+          <label className={`text-[10px] font-bold uppercase block mb-3 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Connect to table
+          </label>
+          <input
+            type="text"
+            placeholder="Search tables..."
+            value={connectTableSearch}
+            onChange={(e) => setConnectTableSearch(e.target.value)}
+            className={`w-full px-3 py-2 rounded-lg text-xs mb-3 border outline-none transition-all duration-200 ${
+              isDarkMode
+                ? "bg-slate-900 border-slate-700 text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            disabled={isLocked}
+          />
+          <div className="grid grid-cols-1 gap-2">
+            {tables
+              .filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase()))
+              .map((target) => {
+                const isLinked = relations.some(
+                  (r) =>
+                    (r.sourceTableId === t.id && r.targetTableId === target.id) ||
+                    (r.sourceTableId === target.id && r.targetTableId === t.id)
+                );
+                return (
+                  <button
+                    key={target.id}
+                    onClick={() => !isLocked && toggleRelation(t.id, target.id)}
+                    disabled={isLocked}
+                    className={`text-left px-3 py-2 rounded-lg text-xs border transition-all duration-200 ${
+                      isLocked ? "opacity-50 cursor-not-allowed" : ""
+                    } ${
+                      isLinked
+                        ? isDarkMode
+                          ? "bg-indigo-900/40 border-indigo-600 text-indigo-200 hover:bg-indigo-900/60"
+                          : "bg-indigo-100 border-indigo-400 text-indigo-900 hover:bg-indigo-200"
+                        : isDarkMode
+                        ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600"
+                        : "border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400"
+                    }`}
+                  >
+                    {isLinked ? "✓ " : ""}Link to {target.name}
+                  </button>
+                );
+              })}
+            {tables.filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase())).length === 0 && (
+              <div className={`text-xs py-3 text-center transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                {connectTableSearch.length > 0 ? "No tables found" : "No other tables available"}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Feature 4: Comments Section */}
+        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+          <div className="flex items-center justify-between mb-3">
+            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              <MessageSquare size={12} />
+              Comments {comments.length > 0 && `(${comments.length})`}
+            </label>
+          </div>
+
+          {/* Add comment form */}
+          {!isLocked && (
+            <div className="mb-4 space-y-2">
+              <textarea
+                className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
+                  isDarkMode
+                    ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
+                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
+                }`}
+                rows={2}
+                placeholder="Add a comment..."
+                value={newCommentText}
+                onChange={(e) => setNewCommentText(e.target.value)}
+              />
+              <button
+                onClick={async () => {
+                  if (newCommentText.trim()) {
+                    try {
+                      await addComment(newCommentText);
+                      setNewCommentText("");
+                      push({ title: "Comment added", type: "success" });
+                    } catch (err) {
+                      push({ title: "Failed to add comment", type: "error" });
+                    }
+                  }
+                }}
+                disabled={!newCommentText.trim() || commentsLoading}
+                className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                Post Comment
+              </button>
+            </div>
+          )}
+
+          {/* Comments list */}
+          {commentsLoading ? (
+            <div className={`text-xs text-center py-2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+              Loading comments...
+            </div>
+          ) : comments.length === 0 ? (
+            <div className={`text-xs text-center py-4 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+              No comments yet
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {comments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className={`p-2.5 rounded-lg border transition-all duration-200 ${
+                    isDarkMode ? "bg-slate-950/50 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                        {comment.author_email?.split('@')}
+                      </div>
+                      <div className={`text-xs my-1.5 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                        {comment.content}
+                      </div>
+                      <div className={`text-[8px] ${isDarkMode ? "text-slate-600" : "text-slate-500"}`}>
+                        {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    {comment.author_id === user.id && (
+                      <button
+                        onClick={() => deleteComment(comment.id)}
+                        className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
+                        title="Delete comment"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Feature 5: Sample Data */}
+        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+          <button
+            onClick={() => {
+              if (!sampleDataShown) {
+                const data = generateSampleData(t.columns, 5);
+                setSampleData(data);
+                setSampleDataShown(true);
+              } else {
+                setSampleDataShown(false);
+              }
+            }}
+            className={`w-full px-3 py-2 rounded-lg text-xs font-bold border transition-all duration-200 flex items-center justify-center gap-2 ${
+              sampleDataShown
+                ? "bg-emerald-500/10 border-emerald-500 text-emerald-500"
+                : isDarkMode 
+                  ? "border-slate-700 text-slate-400 hover:bg-slate-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Zap size={12} />
+            {sampleDataShown ? "Hide" : "Show"} Sample Data
+          </button>
+
+          {sampleDataShown && sampleData.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {/* Sample data mini table */}
+              <div className={`overflow-x-auto rounded-lg border transition-all duration-200 ${
+                isDarkMode ? "border-slate-800 bg-slate-950/30" : "border-slate-200 bg-slate-50"
+              }`}>
+                <table className="w-full text-[9px]">
+                  <thead>
+                    <tr className={`border-b transition-colors duration-200 ${isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-slate-100"}`}>
+                      {t.columns.map((col) => (
+                        <th key={col.id} className={`px-2 py-1.5 text-left font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                          <div className="truncate">{col.name}</div>
+                          <div className={`text-[8px] font-normal opacity-60 mt-0.5 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
+                            {col.type}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sampleData.slice(0, 3).map((row, idx) => (
+                      <tr key={idx} className={`border-b transition-colors duration-200 hover:bg-opacity-50 ${isDarkMode ? "border-slate-800 hover:bg-slate-900/20" : "border-slate-100 hover:bg-slate-100"}`}>
+                        {t.columns.map((col) => (
+                          <td key={col.id} className={`px-2 py-1 ${isDarkMode ? "text-slate-400" : "text-slate-600"} truncate max-w-xs`}>
+                            {String(row[col.name])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Quick copy buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const json = sampleDataToJSON(t.name, t.columns, sampleData);
+                    navigator.clipboard.writeText(json);
+                    push({ title: "JSON copied to clipboard", type: "success" });
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                    isDarkMode ? "border-slate-700 text-slate-400 hover:bg-slate-800" : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  Copy JSON
+                </button>
+                <button
+                  onClick={() => {
+                    const sql = sampleDataToSQLInsert(t.name, t.columns, sampleData);
+                    navigator.clipboard.writeText(sql);
+                    push({ title: "SQL INSERT copied", type: "success" });
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                    isDarkMode ? "border-slate-700 text-slate-400 hover:bg-slate-800" : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  Copy SQL
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Delete buttons */}
+        <div className="flex items-center gap-2 pt-4 border-t transition-colors duration-300" style={{borderColor: isDarkMode ? "#1e293b" : "#e2e8f0"}}>
+          <button
+            onClick={() => duplicateTable(t.id)}
+            disabled={isLocked}
+            className={`flex-1 py-2 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200`}
+          >
+            Duplicate table
+          </button>
+          <button
+            onClick={() => {
+              if (!isLocked) {
+                setTables(tables.filter((x) => x.id !== t.id));
+                setRelations(relations.filter((r) => r.sourceTableId !== t.id && r.targetTableId !== t.id));
+                setSelectedTableId(null);
+                setMultiSelectedTableIds(new Set());
+                pushHistory();
+                push({ title: "Table deleted", type: "info" });
+              }
+            }}
+            disabled={isLocked}
+            className="flex-1 py-2 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg hover:bg-red-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          >
+            Delete table
+          </button>
+        </div>
+      </div>
+    );
+  })()
+) : selectedEdgeId ? (
               (() => {
                 const r = relations.find((x) => x.id === selectedEdgeId)!;
                 return (
