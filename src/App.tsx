@@ -2043,7 +2043,7 @@ const selectedTableRelationships = useMemo(() => {
               comments.map((c) => (
                 <div key={c.id} className={`p-2 rounded-lg text-xs space-y-1 ${isDarkMode ? "bg-slate-800/40 border border-slate-700" : "bg-slate-100/40 border border-slate-300"}`}>
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-indigo-400">{c.user_email?.split("@")[0]}</span>
+                    <span className="font-semibold text-indigo-400">{(c.user_email || c.author_email || "").split("@")[0]}</span>
                     {!isLocked && (
                       <button
                         onClick={() => deleteComment(c.id)}
@@ -2053,7 +2053,7 @@ const selectedTableRelationships = useMemo(() => {
                       </button>
                     )}
                   </div>
-                  <p className="text-slate-300 text-[10px]">{c.content}</p>
+                  <p className="text-slate-300 text-[10px]">{c.content || c.text}</p>
                 </div>
               ))
             ) : (
@@ -2091,8 +2091,7 @@ const selectedTableRelationships = useMemo(() => {
         </div>
       </div>
               );
-              })()
-            ) : selectedEdgeId ? (
+              })()            ) : selectedEdgeId ? (
               (() => {
                 const r = relations.find((x) => x.id === selectedEdgeId)!;
                 const s = tables.find((x) => x.id === r.sourceTableId)!;
@@ -2296,9 +2295,18 @@ export default function App() {
       is_locked: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      team_id: null,
+      created_by: null,
+      updated_by: null,
     };
     setCurrentDiagram(newDiagram);
     setSelectedDiagramId(newDiagram.id);
+  };
+
+  const handleDeleteDiagram = async (id: string) => {
+    // Implement diagram deletion
+    setSelectedDiagramId(null);
+    setCurrentDiagram(null);
   };
 
   return selectedDiagramId && currentDiagram ? (
@@ -2321,8 +2329,10 @@ export default function App() {
       diagrams={diagrams}
       onSelect={handleSelectDiagram}
       onCreate={handleCreateDiagram}
+      onDelete={handleDeleteDiagram}
       onLogout={() => navigate("/auth")}
       loading={syncLoading}
+      teamId={null}
     />
   );
 }
