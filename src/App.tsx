@@ -36,7 +36,6 @@ import {
 } from "lucide-react";
 
 // Add these utility imports:
-import { useTableComments } from "./hooks/useTableComments";
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
 import html2canvas from "html2canvas";
@@ -48,6 +47,13 @@ import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
 /** --- TYPES --- **/
+type TableComment = {
+  id: string;
+  author_id: string;
+  author_email: string;
+  content: string;
+  created_at: string;
+};
 type Column = { id: string; name: string; type: string; isPk: boolean; isFk: boolean };
 type Table = { 
   id: string; 
@@ -56,7 +62,8 @@ type Table = {
   y: number; 
   columns: Column[]; 
   color?: string;
-  description?: string;  // ← ADD THIS LINE
+  description?: string;
+  comments?: TableComment[];
 };
 
 
@@ -201,19 +208,8 @@ function ERDBuilder({
   // Feature 1: Lock/Unlock diagram
 const [isLocked, setIsLocked] = useState((diagram as any)?.is_locked ?? false);
 
-// Feature 4: Comments
-const { 
-  comments, 
-  loading: commentsLoading, 
-  addComment, 
-  deleteComment 
-} = useTableComments(
-  diagram?.id ?? null,
-  selectedTableId,
-  user.id
-);
+// Feature 4: Comments - stored directly in table.comments array (synced to cloud)
 const [newCommentText, setNewCommentText] = useState("");
-// const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 
 // Feature 5: Sample Data
 const [sampleDataShown, setSampleDataShown] = useState(false);
@@ -239,6 +235,44 @@ const [sampleData, setSampleData] = useState<any[]>([]);
     });
     setHistoryIndex((idx) => idx + 1);
   }, [tables, relations, viewport]);
+
+  // Feature 4: Comments - stored directly in table.comments array (synced to cloud)
+  // Get comments for the selected table
+  const selectedTableComments = useMemo(() => {
+    if (!selectedTableId) return [];
+    const table = tables.find(t => t.id === selectedTableId);
+    return table?.comments || [];
+  }, [selectedTableId, tables]);
+
+  // Add comment to the selected table
+  const handleAddComment = useCallback((content: string) => {
+    if (!selectedTableId || !content.trim() || isLocked) return;
+    
+    const newComment: TableComment = {
+      id: generateId(),
+      author_id: user.id,
+      author_email: user.email || 'Unknown',
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+    };
+    
+    setTables(prev => prev.map(t => 
+      t.id === selectedTableId
+        ? { ...t, comments: [...(t.comments || []), newComment] }
+        : t
+    ));
+  }, [selectedTableId, user.id, user.email, isLocked]);
+
+  // Delete comment from the selected table
+  const handleDeleteComment = useCallback((commentId: string) => {
+    if (!selectedTableId || isLocked) return;
+    
+    setTables(prev => prev.map(t => 
+      t.id === selectedTableId
+        ? { ...t, comments: (t.comments || []).filter(c => c.id !== commentId) }
+        : t
+    ));
+  }, [selectedTableId, isLocked]);
 
   const undo = useCallback(() => {
     if (historyIndexRef.current <= 0) return;
@@ -314,6 +348,7 @@ const [sampleData, setSampleData] = useState<any[]>([]);
   // --- PERSISTENCE (LOAD FROM CLOUD & AUTO-SAVE) ---
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLocalSaveRef = useRef<string | null>(null); // Track when we last saved locally
 
   // Load diagram from cloud on mount
   useEffect(() => {
@@ -328,6 +363,7 @@ const [sampleData, setSampleData] = useState<any[]>([]);
         setRelations(loadedRelations);
         setViewport(loadedViewport);
         setIsDarkMode(diagram.is_dark_mode ?? true);
+        setIsLocked(diagram.is_locked ?? false);
         setLastSaved("Loaded from cloud");
       } catch (e) {
         console.error("Failed to load data from cloud", e);
@@ -347,6 +383,40 @@ const [sampleData, setSampleData] = useState<any[]>([]);
       }
     }
   }, [diagram]);
+
+  // Listen for remote changes after initial load
+  useEffect(() => {
+    if (isInitialLoad.current || !diagram) return;
+    
+    // Only apply remote changes if we haven't saved in the last 2 seconds
+    // This prevents overwriting local edits with our own saves echoed back
+    const now = Date.now();
+    const lastSaveTime = lastLocalSaveRef.current ? parseInt(lastLocalSaveRef.current) : 0;
+    if (now - lastSaveTime < 2500) return;
+
+    // Detect if this is a remote change (diagram data updated from server)
+    const remoteTables = (diagram.tables as Table[]) || [];
+    const remoteRelations = (diagram.relations as Relation[]) || [];
+    
+    // Check if data is different
+    const currentTablesJson = JSON.stringify(tables);
+    const remoteTablesJson = JSON.stringify(remoteTables);
+    const currentRelationsJson = JSON.stringify(relations);
+    const remoteRelationsJson = JSON.stringify(remoteRelations);
+    
+    if (currentTablesJson !== remoteTablesJson || currentRelationsJson !== remoteRelationsJson) {
+      // Apply remote changes
+      suppressHistory.current = true;
+      setTables(remoteTables);
+      setRelations(remoteRelations);
+      setIsDarkMode(diagram.is_dark_mode ?? true);
+      setIsLocked(diagram.is_locked ?? false);
+      suppressHistory.current = false;
+      
+      push({ title: "Remote changes applied", description: "Another user made changes", type: "info" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagram?.updated_at]);
 
   // Push initial snapshot once loaded
   useEffect(() => {
@@ -369,6 +439,9 @@ const [sampleData, setSampleData] = useState<any[]>([]);
     saveTimeoutRef.current = setTimeout(() => {
       setIsSaving(true);
       const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      
+      // Track when we saved locally to avoid re-applying our own changes
+      lastLocalSaveRef.current = Date.now().toString();
       
       // Save to localStorage as backup
       localStorage.setItem(
@@ -564,6 +637,10 @@ const selectedTableRelationships = useMemo(() => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Update live cursor position for presence
+    const worldPos = toWorld(e.clientX, e.clientY);
+    updateCursor(worldPos.x, worldPos.y);
+
   // TABLE DRAG - Check first (highest priority for user interaction)
   if (isDragging && draggedTableId && !isPanning) {
     const world = toWorld(e.clientX, e.clientY);
@@ -2028,7 +2105,7 @@ const selectedTableRelationships = useMemo(() => {
           <div className="flex items-center justify-between mb-3">
             <label className={`text-[10px] font-bold uppercase transition-colors duration-200 flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
               <MessageSquare size={12} />
-              Comments {comments.length > 0 && `(${comments.length})`}
+              Comments {selectedTableComments.length > 0 && `(${selectedTableComments.length})`}
             </label>
           </div>
 
@@ -2047,18 +2124,14 @@ const selectedTableRelationships = useMemo(() => {
                 onChange={(e) => setNewCommentText(e.target.value)}
               />
               <button
-                onClick={async () => {
+                onClick={() => {
                   if (newCommentText.trim()) {
-                    try {
-                      await addComment(newCommentText);
-                      setNewCommentText("");
-                      push({ title: "Comment added", type: "success" });
-                    } catch (err) {
-                      push({ title: "Failed to add comment", type: "error" });
-                    }
+                    handleAddComment(newCommentText);
+                    setNewCommentText("");
+                    push({ title: "Comment added", type: "success" });
                   }
                 }}
-                disabled={!newCommentText.trim() || commentsLoading}
+                disabled={!newCommentText.trim()}
                 className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 Post Comment
@@ -2067,17 +2140,13 @@ const selectedTableRelationships = useMemo(() => {
           )}
 
           {/* Comments list */}
-          {commentsLoading ? (
-            <div className={`text-xs text-center py-2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-              Loading comments...
-            </div>
-          ) : comments.length === 0 ? (
+          {selectedTableComments.length === 0 ? (
             <div className={`text-xs text-center py-4 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
               No comments yet
             </div>
           ) : (
             <div className="space-y-3 max-h-64 overflow-y-auto">
-              {comments.map((comment) => (
+              {selectedTableComments.map((comment: TableComment) => (
                 <div
                   key={comment.id}
                   className={`p-2.5 rounded-lg border transition-all duration-200 ${
@@ -2087,7 +2156,7 @@ const selectedTableRelationships = useMemo(() => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
-                        {comment.author_email?.split('@')}
+                        {comment.author_email?.split('@')[0] || 'User'}
                       </div>
                       <div className={`text-xs my-1.5 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
                         {comment.content}
@@ -2096,9 +2165,9 @@ const selectedTableRelationships = useMemo(() => {
                         {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString()}
                       </div>
                     </div>
-                    {comment.author_id === user.id && (
+                    {comment.author_id === user.id && !isLocked && (
                       <button
-                        onClick={() => deleteComment(comment.id)}
+                        onClick={() => handleDeleteComment(comment.id)}
                         className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
                         title="Delete comment"
                       >
