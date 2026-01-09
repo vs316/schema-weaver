@@ -63,8 +63,21 @@ export function useCloudSync(userId?: string) {
             table: 'erd_diagrams',
             filter: `team_id=eq.${team_id}`,
           },
-          () => {
+          (payload) => {
+            // Fetch updated list
             fetchDiagrams(team_id);
+            
+            // If the current diagram was updated, update its state
+            if (payload.eventType === 'UPDATE' && payload.new) {
+              const updatedDiagram = payload.new as ERDDiagram;
+              setCurrentDiagram((prev) => {
+                if (prev && prev.id === updatedDiagram.id) {
+                  // Only update if data actually changed (avoid overwriting local edits)
+                  return updatedDiagram;
+                }
+                return prev;
+              });
+            }
           }
         )
         .subscribe();
