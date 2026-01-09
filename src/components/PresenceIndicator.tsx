@@ -128,21 +128,21 @@ interface LiveCursorProps {
 export function LiveCursor({ user, viewport }: LiveCursorProps) {
   if (!user.cursor) return null;
 
+  // Convert world coordinates to screen coordinates
   const screenX = user.cursor.x * viewport.zoom + viewport.x;
   const screenY = user.cursor.y * viewport.zoom + viewport.y;
 
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.5 }}
-      animate={{ 
-        opacity: 1, 
-        scale: 1,
-        x: screenX,
-        y: screenY,
-      }}
+      animate={{ opacity: 1, scale: 1 }}
       transition={{ type: 'spring', damping: 30, stiffness: 500 }}
-      className="absolute pointer-events-none z-50"
-      style={{ left: 0, top: 0 }}
+      className="absolute pointer-events-none z-[100]"
+      style={{
+        left: screenX,
+        top: screenY,
+        willChange: 'transform',
+      }}
     >
       {/* Cursor arrow */}
       <svg
@@ -150,7 +150,7 @@ export function LiveCursor({ user, viewport }: LiveCursorProps) {
         height="24"
         viewBox="0 0 24 24"
         fill="none"
-        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}
+        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}
       >
         <path
           d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.38 2.79a.5.5 0 0 0-.88.42Z"
@@ -162,7 +162,7 @@ export function LiveCursor({ user, viewport }: LiveCursorProps) {
 
       {/* Name label */}
       <div
-        className="absolute left-4 top-4 px-2 py-0.5 rounded text-xs font-medium text-white whitespace-nowrap"
+        className="absolute left-5 top-5 px-2 py-0.5 rounded text-xs font-medium text-white whitespace-nowrap shadow-lg"
         style={{ backgroundColor: user.color }}
       >
         {user.name}

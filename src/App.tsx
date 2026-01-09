@@ -539,7 +539,8 @@ const selectedTableRelationships = useMemo(() => {
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 2) {
+    // Right-click (button 2) OR middle-click (button 1) for panning
+    if (e.button === 2 || e.button === 1) {
       e.preventDefault();
       setIsPanning(true);
       setDragOffset({ x: e.clientX - viewport.x, y: e.clientY - viewport.y });

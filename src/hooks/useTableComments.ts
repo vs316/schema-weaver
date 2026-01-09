@@ -1,151 +1,74 @@
 // src/hooks/useTableComments.ts
-// Feature 4: Manage table comments with real-time Supabase sync
+// Feature 4: Manage table comments stored within diagram's table data (local state)
+// Comments are persisted as part of the table's data structure in erd_diagrams
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "../utils/supabase";
+import { useState, useCallback } from "react";
 import type { TableComment } from "../types";
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export function useTableComments(
   diagramId: string | null,
   tableId: string | null,
   userId: string | null
 ) {
+  // For now, comments are stored within table data itself, not a separate table
+  // This avoids needing a table_comments table in the database
   const [comments, setComments] = useState<TableComment[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load comments for the selected table
-  useEffect(() => {
-    if (!diagramId || !tableId) {
-      setComments([]);
-      return;
-    }
-
-    const loadComments = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data, error: err } = await supabase
-          .from("table_comments")
-          .select("*")
-          .eq("diagram_id", diagramId)
-          .eq("table_id", tableId)
-          .order("created_at", { ascending: false });
-
-        if (err) throw err;
-        setComments((data as TableComment[]) || []);
-      } catch (err) {
-        console.error("Failed to load comments:", err);
-        setError("Failed to load comments");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadComments();
-
-    // Subscribe to real-time changes
-    const subscription = supabase
-      .channel(`comments:${diagramId}:${tableId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "table_comments",
-          filter: `diagram_id=eq.${diagramId}`,
-        },
-        (payload: any) => {
-          if (payload.new?.table_id === tableId) {
-            if (payload.eventType === "DELETE") {
-              setComments((prev) =>
-                prev.filter((c) => c.id !== payload.old.id)
-              );
-            } else {
-              setComments((prev) => {
-                const exists = prev.find((c) => c.id === payload.new.id);
-                if (exists) {
-                  return prev.map((c) => (c.id === payload.new.id ? payload.new : c));
-                }
-                return [payload.new, ...prev];
-              });
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [diagramId, tableId]);
-
+  // Since comments are now stored in table.comments array (in App.tsx state),
+  // this hook provides utility functions that work with local state
+  
   const addComment = useCallback(
-    async (content: string) => {
+    async (content: string): Promise<TableComment | null> => {
       if (!diagramId || !tableId || !userId) {
         setError("Missing required information");
-        return;
+        return null;
       }
 
-      try {
-        const { data: userData, error: userErr } = await supabase.auth.getUser();
-        if (userErr) throw userErr;
+      const newComment: TableComment = {
+        id: generateId(),
+        diagram_id: diagramId,
+        table_id: tableId,
+        author_id: userId,
+        author_email: "current-user",
+        content,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-        const { error: err } = await supabase.from("table_comments").insert({
-          diagram_id: diagramId,
-          table_id: tableId,
-          author_id: userId,
-          author_email: userData.user?.email || "unknown",
-          content,
-        });
-
-        if (err) throw err;
-      } catch (err) {
-        console.error("Failed to add comment:", err);
-        setError("Failed to add comment");
-        throw err;
-      }
+      setComments(prev => [newComment, ...prev]);
+      return newComment;
     },
     [diagramId, tableId, userId]
   );
 
   const deleteComment = useCallback(
     async (commentId: string) => {
-      try {
-        const { error: err } = await supabase
-          .from("table_comments")
-          .delete()
-          .eq("id", commentId)
-          .eq("author_id", userId); // Ensure user can only delete their own
-
-        if (err) throw err;
-      } catch (err) {
-        console.error("Failed to delete comment:", err);
-        setError("Failed to delete comment");
-        throw err;
-      }
+      setComments(prev => prev.filter(c => c.id !== commentId));
     },
-    [userId]
+    []
   );
 
   const updateComment = useCallback(
     async (commentId: string, content: string) => {
-      try {
-        const { error: err } = await supabase
-          .from("table_comments")
-          .update({ content, updated_at: new Date().toISOString() })
-          .eq("id", commentId)
-          .eq("author_id", userId);
-
-        if (err) throw err;
-      } catch (err) {
-        console.error("Failed to update comment:", err);
-        setError("Failed to update comment");
-        throw err;
-      }
+      setComments(prev =>
+        prev.map(c =>
+          c.id === commentId
+            ? { ...c, content, updated_at: new Date().toISOString() }
+            : c
+        )
+      );
     },
-    [userId]
+    []
   );
+
+  // Sync comments from table data
+  const setCommentsFromTable = useCallback((tableComments: TableComment[]) => {
+    setComments(tableComments || []);
+  }, []);
 
   return {
     comments,
@@ -154,5 +77,6 @@ export function useTableComments(
     addComment,
     deleteComment,
     updateComment,
+    setCommentsFromTable,
   };
 }

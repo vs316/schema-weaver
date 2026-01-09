@@ -238,16 +238,16 @@ export function TableDetailsPanel({
                     className="text-[10px] font-semibold"
                     style={{ color: isDarkMode ? 'hsl(239 84% 67%)' : 'hsl(239 84% 50%)' }}
                   >
-                    {comment.userName}
+                    {comment.author_email?.split('@')[0] || 'User'}
                   </span>
                   <div className="flex items-center gap-2">
                     <span
                       className="text-[9px]"
                       style={{ color: isDarkMode ? 'hsl(215 20% 45%)' : 'hsl(215 20% 65%)' }}
                     >
-                      {new Date(comment.createdAt).toLocaleDateString()}
+                      {new Date(comment.created_at).toLocaleDateString()}
                     </span>
-                    {comment.userId === userId && !isLocked && (
+                    {comment.author_id === userId && !isLocked && (
                       <button
                         onClick={() => onDeleteComment(comment.id)}
                         className="p-0.5 rounded hover:bg-red-500/20"
@@ -261,7 +261,7 @@ export function TableDetailsPanel({
                   className="text-[11px]"
                   style={{ color: isDarkMode ? 'hsl(210 40% 80%)' : 'hsl(222 47% 30%)' }}
                 >
-                  {comment.text}
+                  {comment.content}
                 </p>
               </div>
             ))}

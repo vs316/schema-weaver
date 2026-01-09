@@ -1,34 +1,9 @@
 // Supabase integration for Team ERD Workspace
-import { createClient } from '@supabase/supabase-js';
+// Re-export from safeClient to ensure consistent configuration
+export { supabase } from '../integrations/supabase/safeClient';
+export { getResolvedBackendConfig } from '../integrations/supabase/safeClient';
 
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL!;
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const PROJECT_NAME = 'Team ERD Workspace';
-
-// Load latest shared ERD
-export const loadTeamERD = async () => {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('current_state')
-    .eq('name', PROJECT_NAME)
-    .single();
-
-  if (error || !data) return null;
-  return data.current_state;
-};
-
-// Save changes with timestamp update
-export const saveTeamERD = async (erdState: any) => {
-  const { error } = await supabase
-    .from('projects')
-    .update({
-      current_state: erdState,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('name', PROJECT_NAME);
-
-  if (error) console.error('Save failed:', error);
-};
+// Get URLs for edge functions etc.
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ekafxpolsdhlktmsgexd.supabase.co';
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrYWZ4cG9sc2RobGt0bXNnZXhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMDc1ODUsImV4cCI6MjA4MjU4MzU4NX0.pWorY9v_1CG3R8DsxuYPU5nUEh9ceOO-cMhd3V4U_WA';

@@ -8,14 +8,13 @@ export type Column = {
 
 export type TableComment = {
   id: string;
-  userId: string;
-  userName: string;
-  user_email?: string;
-  text: string;
-  createdAt: string;
-  content?: string;
-  author_id?: string;
-  author_email?: string;
+  diagram_id?: string;
+  table_id?: string;
+  author_id: string;
+  author_email: string;
+  content: string;
+  created_at: string;
+  updated_at?: string;
 };
 
 export type Table = {
