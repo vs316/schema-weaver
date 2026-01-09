@@ -14,6 +14,7 @@ import {
   Download,
   Sun,
   Moon,
+  MousePointer2,
   Upload,
   CheckCircle2,
   Maximize,
@@ -23,6 +24,7 @@ import {
   Copy,
   Undo2,
   Grid3x3,
+  Palette,
   FileText,
   Cloud,
   ArrowLeft,
@@ -30,10 +32,12 @@ import {
   Lock,           // ADD THIS
   Unlock,         // ADD THIS
   MessageSquare,  // ADD THIS for comments
+  Zap,           // ADD THIS for sample data
 } from "lucide-react";
 
 // Add these utility imports:
 import { useTableComments } from "./hooks/useTableComments";
+import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
 import html2canvas from "html2canvas";
 import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
@@ -41,6 +45,7 @@ import { usePresence } from "./hooks/usePresence";
 import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import type { Json } from "./integrations/supabase/types";
+import { supabase } from "./utils/supabase";
 
 /** --- TYPES --- **/
 type Column = { id: string; name: string; type: string; isPk: boolean; isFk: boolean };
@@ -127,7 +132,7 @@ function ERDBuilder({
 }: { 
   user: AppUser;
   diagram: ERDDiagram | null;
-  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean; is_locked?: boolean }) => void;
+  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => void;
   onBack: () => void;
   syncing: boolean;
   onLogout: () => void;
@@ -161,12 +166,6 @@ function ERDBuilder({
   const [edgeDragStartBend, setEdgeDragStartBend] = useState<{ x: number; y: number } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
-
-  // --- PERFORMANCE OPTIMIZATION REFS ---
-  // Store drag positions in refs for instant visual feedback without setState
-  const dragPreviewRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const edgeBendPreviewRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const dragStartTablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   const toWorld = (clientX: number, clientY: number) => {
     if (!canvasRef.current) return { x: 0, y: 0 };
@@ -214,6 +213,11 @@ const {
   user.id
 );
 const [newCommentText, setNewCommentText] = useState("");
+// const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+
+// Feature 5: Sample Data
+const [sampleDataShown, setSampleDataShown] = useState(false);
+const [sampleData, setSampleData] = useState<any[]>([]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -501,15 +505,6 @@ const selectedTableRelationships = useMemo(() => {
       y: world.y - table.y,
     });
 
-    // Store starting positions for all selected tables
-    const selectedIds = multiSelectedTableIds.size > 0 ? multiSelectedTableIds : new Set([tableId]);
-    dragStartTablePositionsRef.current.clear();
-    for (const id of selectedIds) {
-      const t = tables.find(x => x.id === id);
-      if (t) dragStartTablePositionsRef.current.set(id, { x: t.x, y: t.y });
-    }
-    dragPreviewRef.current.clear();
-
     setDraggedTableId(tableId);
     setIsDragging(true);
     lastActionWasDrag.current = true;
@@ -540,7 +535,6 @@ const selectedTableRelationships = useMemo(() => {
 
     const currentBend = r.bend ?? { x: 0, y: 0 };
     setEdgeDragStartBend(currentBend);
-    edgeBendPreviewRef.current.clear();
     lastActionWasDrag.current = true;
   };
 
@@ -569,80 +563,82 @@ const selectedTableRelationships = useMemo(() => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    // TABLE DRAG - Check first (highest priority for user interaction)
-    if (isDragging && draggedTableId && !isPanning) {
-      const world = toWorld(e.clientX, e.clientY);
-      const anchorTable = tables.find((t) => t.id === draggedTableId);
-      if (!anchorTable) return;
+  // TABLE DRAG - Check first (highest priority for user interaction)
+  if (isDragging && draggedTableId && !isPanning) {
+    const world = toWorld(e.clientX, e.clientY);
+    const anchorTable = tables.find((t) => t.id === draggedTableId);
+    if (!anchorTable) return;
 
-      let newX = world.x - dragOffset.x;
-      let newY = world.y - dragOffset.y;
+    let newX = world.x - dragOffset.x;
+    let newY = world.y - dragOffset.y;
 
-      // Don't snap during drag - snapping happens on drop
-      // This allows smooth placement anywhere
-
-      const selectedIds = multiSelectedTableIds.size > 0 ? multiSelectedTableIds : new Set([draggedTableId]);
-      const dx = newX - anchorTable.x;
-      const dy = newY - anchorTable.y;
-
-      // Store visual offsets in ref (no setState = 60fps)
-      dragPreviewRef.current.clear();
-      for (const id of selectedIds) {
-        const startPos = dragStartTablePositionsRef.current.get(id);
-        if (startPos) {
-          dragPreviewRef.current.set(id, {
-            x: startPos.x + dx,
-            y: startPos.y + dy,
-          });
-        }
-      }
-
-      // Trigger re-render via state update (batched by React)
-      // But store actual positions in ref for instant visual feedback
-      return;
+    if (isGridSnap) {
+      newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+      newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
     }
 
-    // EDGE BEND - Second priority
-    if (isDraggingEdge && draggedEdgeId && edgeDragStart && edgeDragStartBend && !isPanning) {
-      const world = toWorld(e.clientX, e.clientY);
-      const dx = world.x - edgeDragStart.x;
-      const dy = world.y - edgeDragStart.y;
+    const selectedIds = multiSelectedTableIds.size > 0 ? multiSelectedTableIds : new Set([draggedTableId]);
+    const dx = newX - anchorTable.x;
+    const dy = newY - anchorTable.y;
 
-      edgeBendPreviewRef.current.set(draggedEdgeId, {
-        x: edgeDragStartBend.x + dx,
-        y: edgeDragStartBend.y + dy,
-      });
+    setTables((prev) =>
+      prev.map((t) => {
+        if (!selectedIds.has(t.id)) return t;
+        return { ...t, x: t.x + dx, y: t.y + dy };
+      })
+    );
+    return;
+  }
 
-      return;
-    }
+  // EDGE BEND - Second priority
+  if (isDraggingEdge && draggedEdgeId && edgeDragStart && edgeDragStartBend && !isPanning) {
+    const world = toWorld(e.clientX, e.clientY);
+    const dx = world.x - edgeDragStart.x;
+    const dy = world.y - edgeDragStart.y;
 
-    // LASSO SELECTION - Third priority
-    if (isLassoing && lassoStart && !isPanning) {
-      const world = toWorld(e.clientX, e.clientY);
-      const x1 = lassoStart.x;
-      const y1 = lassoStart.y;
-      const x2 = world.x;
-      const y2 = world.y;
+    setRelations((prev) =>
+      prev.map((r) =>
+        r.id === draggedEdgeId
+          ? {
+              ...r,
+              bend: {
+                x: edgeDragStartBend.x + dx,
+                y: edgeDragStartBend.y + dy,
+              },
+            }
+          : r
+      )
+    );
+    return;
+  }
 
-      const rx = Math.min(x1, x2);
-      const ry = Math.min(y1, y2);
-      const rw = Math.abs(x2 - x1);
-      const rh = Math.abs(y2 - y1);
+  // LASSO SELECTION - Third priority
+  if (isLassoing && lassoStart && !isPanning) {
+    const world = toWorld(e.clientX, e.clientY);
+    const x1 = lassoStart.x;
+    const y1 = lassoStart.y;
+    const x2 = world.x;
+    const y2 = world.y;
 
-      setLassoRect({ x: rx, y: ry, w: rw, h: rh });
-      return;
-    }
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
 
-    // PAN - Lowest priority (only if nothing else is active)
-    if (isPanning) {
-      setViewport((prev) => ({
-        ...prev,
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      }));
-      return;
-    }
-  };
+    setLassoRect({ x: rx, y: ry, w: rw, h: rh });
+    return;
+  }
+
+  // PAN - Lowest priority (only if nothing else is active)
+  if (isPanning) {
+    setViewport((prev) => ({
+      ...prev,
+      x: e.clientX - dragOffset.x,
+      y: e.clientY - dragOffset.y,
+    }));
+    return;
+  }
+};
 
   const finalizeLassoSelection = (shiftKey: boolean) => {
     if (!lassoRect) return;
@@ -681,39 +677,6 @@ const selectedTableRelationships = useMemo(() => {
     setIsDragging(false);
     setIsPanning(false);
 
-    // Finalize drag - commit preview positions to state with grid snapping
-    if (dragPreviewRef.current.size > 0) {
-      setTables((prev) =>
-        prev.map((t) => {
-          const preview = dragPreviewRef.current.get(t.id);
-          if (!preview) return t;
-
-          // Apply grid snapping on drop
-          let finalX = preview.x;
-          let finalY = preview.y;
-          if (isGridSnap) {
-            finalX = Math.round(finalX / GRID_SIZE) * GRID_SIZE;
-            finalY = Math.round(finalY / GRID_SIZE) * GRID_SIZE;
-          }
-
-          return { ...t, x: finalX, y: finalY };
-        })
-      );
-      dragPreviewRef.current.clear();
-    }
-
-    // Finalize edge bend
-    if (edgeBendPreviewRef.current.size > 0) {
-      setRelations((prev) =>
-        prev.map((r) => {
-          const preview = edgeBendPreviewRef.current.get(r.id);
-          if (!preview) return r;
-          return { ...r, bend: preview };
-        })
-      );
-      edgeBendPreviewRef.current.clear();
-    }
-
     if (isDraggingEdge) {
       setIsDraggingEdge(false);
       setDraggedEdgeId(null);
@@ -735,15 +698,6 @@ const selectedTableRelationships = useMemo(() => {
       lastActionWasDrag.current = false;
     }
   };
-
-  // Force re-render on drag preview changes (smooth visual feedback)
-  useEffect(() => {
-    if (dragPreviewRef.current.size > 0 || edgeBendPreviewRef.current.size > 0) {
-      // Trigger render without setState spam - refs already updated
-      const timer = setTimeout(() => {}, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [draggedTableId, draggedEdgeId]);
 
   const addTable = useCallback(() => {
     // Feature 1: Check lock
@@ -791,7 +745,7 @@ const selectedTableRelationships = useMemo(() => {
     });
     pushHistory();
     push({ title: "Table duplicated", type: "success" });
-  }, [isLocked, pushHistory, push]);
+  }, [pushHistory, push]);
 
   const toggleRelation = useCallback((sourceId: string, targetId: string) => {
      // Feature 1: Check lock
@@ -821,7 +775,7 @@ const selectedTableRelationships = useMemo(() => {
       }
     });
     pushHistory();
-  }, [isLocked, pushHistory, push]);
+  }, [isLocked,pushHistory, push]);
 
   const exportJSON = useCallback(() => {
     const data = JSON.stringify({ tables, relations });
@@ -1176,6 +1130,102 @@ const selectedTableRelationships = useMemo(() => {
     return () => window.removeEventListener("keydown", handler);
   }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push]);
 
+  // --- SCHEMA TEMPLATES ---
+  const templates: { name: string; apply: () => void }[] = [
+    {
+      name: "Blog (Users, Posts)",
+      apply: () => {
+        const userT: Table = {
+          id: generateId(),
+          name: "users",
+          x: 200,
+          y: 120,
+          color: "#60a5fa",
+          columns: [
+            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
+            { id: generateId(), name: "email", type: "VARCHAR", isPk: false, isFk: false },
+            { id: generateId(), name: "name", type: "VARCHAR", isPk: false, isFk: false },
+          ],
+        };
+        const postT: Table = {
+          id: generateId(),
+          name: "posts",
+          x: 500,
+          y: 220,
+          color: "#34d399",
+          columns: [
+            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
+            { id: generateId(), name: "title", type: "VARCHAR", isPk: false, isFk: false },
+            { id: generateId(), name: "content", type: "TEXT", isPk: false, isFk: false },
+            { id: generateId(), name: "user_id", type: "INT", isPk: false, isFk: true },
+          ],
+        };
+        const rel: Relation = {
+          id: generateId(),
+          sourceTableId: postT.id,
+          targetTableId: userT.id,
+          label: "user_id",
+          isDashed: false,
+          lineType: "curved",
+          bend: { x: 0, y: 0 },
+        };
+        setTables((prev) => [...prev, userT, postT]);
+        setRelations((prev) => [...prev, rel]);
+        pushHistory();
+        push({ title: "Template applied", description: "Blog schema", type: "success" });
+      },
+    },
+    {
+      name: "Store (Products, Orders, Order_Items)",
+      apply: () => {
+        const products: Table = {
+          id: generateId(),
+          name: "products",
+          x: 220,
+          y: 120,
+          color: "#f59e0b",
+          columns: [
+            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
+            { id: generateId(), name: "name", type: "VARCHAR", isPk: false, isFk: false },
+            { id: generateId(), name: "price", type: "INT", isPk: false, isFk: false },
+          ],
+        };
+        const orders: Table = {
+          id: generateId(),
+          name: "orders",
+          x: 520,
+          y: 140,
+          color: "#22c55e",
+          columns: [
+            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
+            { id: generateId(), name: "customer_name", type: "VARCHAR", isPk: false, isFk: false },
+          ],
+        };
+        const orderItems: Table = {
+          id: generateId(),
+          name: "order_items",
+          x: 420,
+          y: 320,
+          color: "#a78bfa",
+          columns: [
+            { id: generateId(), name: "id", type: "INT", isPk: true, isFk: false },
+            { id: generateId(), name: "order_id", type: "INT", isPk: false, isFk: true },
+            { id: generateId(), name: "product_id", type: "INT", isPk: false, isFk: true },
+            { id: generateId(), name: "qty", type: "INT", isPk: false, isFk: false },
+          ],
+        };
+        const rels: Relation[] = [
+          { id: generateId(), sourceTableId: orderItems.id, targetTableId: orders.id, label: "order_id", isDashed: false, lineType: "curved", bend: { x: 0, y: 0 } },
+          { id: generateId(), sourceTableId: orderItems.id, targetTableId: products.id, label: "product_id", isDashed: false, lineType: "curved", bend: { x: 0, y: 0 } },
+        ];
+        setTables((prev) => [...prev, products, orders, orderItems]);
+        setRelations((prev) => [...prev, ...rels]);
+        pushHistory();
+        push({ title: "Template applied", description: "Store schema", type: "success" });
+      },
+    },
+  ];
+
   // --- RENDER ---
   return (
     <div className={`flex h-screen overflow-hidden flex-col ${isDarkMode ? "bg-slate-950 text-slate-50" : "bg-white text-slate-900"}`}>
@@ -1369,13 +1419,13 @@ const selectedTableRelationships = useMemo(() => {
           onMouseLeave={() => handleMouseUp()}
           onContextMenu={(e) => e.preventDefault()}
           onClick={(e) => {
-            // Don't clear selections if we just finished dragging
-            if (lastActionWasDrag.current) {
-              lastActionWasDrag.current = false;
-              return;
-            }
-            if (e.target === e.currentTarget) clearAllSelections();
-          }}
+  // Don't clear selections if we just finished dragging
+  if (lastActionWasDrag.current) {
+    lastActionWasDrag.current = false;
+    return;
+  }
+  if (e.target === e.currentTarget) clearAllSelections();
+}}
           style={{
             backgroundImage: isDarkMode ? "radial-gradient(#1e293b 1px, transparent 1px)" : "radial-gradient(#cbd5e1 1px, transparent 1px)",
             backgroundSize: `${30 * viewport.zoom}px ${30 * viewport.zoom}px`,
@@ -1472,11 +1522,6 @@ const selectedTableRelationships = useMemo(() => {
             </svg>
 
             {tables.map((table) => {
-              // Get preview position if dragging
-              const previewPos = dragPreviewRef.current.get(table.id);
-              const displayX = previewPos?.x ?? table.x;
-              const displayY = previewPos?.y ?? table.y;
-
               const primary = isTablePrimarySelected(table.id);
               const connectedTbl = isTableConnected(table.id);
               const anySel = activeSelectedTableIds.size > 0 || !!selectedEdgeId;
@@ -1503,11 +1548,10 @@ const selectedTableRelationships = useMemo(() => {
                     ${dimUnconnected ? "opacity-30 scale-95" : ""}
                   `}
                   style={{
-                    left: displayX,
-                    top: displayY,
+                    left: table.x,
+                    top: table.y,
                     zIndex: primary ? 30 : connectedTbl ? 20 : 10,
                     boxShadow: table.color ? `0 6px 24px -8px ${table.color}45` : undefined,
-                    willChange: draggedTableId === table.id ? "transform" : "auto",
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -1720,531 +1764,615 @@ const selectedTableRelationships = useMemo(() => {
         {/* Color Picker */}
         <div className="space-y-2">
           <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Table Color
+            Color
           </label>
-          <div className="flex gap-2">
-            {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#f87171", "#a78bfa", "#38bdf8", "#fb923c"].map((color) => (
-              <button
-                key={color}
-                onClick={() => !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color } : x)))}
-                className="w-6 h-6 rounded-lg border-2 transition-all hover:scale-110 active:scale-95"
-                style={{
-                  backgroundColor: color,
-                  borderColor: t.color === color ? "#fff" : "transparent",
-                  boxShadow: t.color === color ? `0 0 12px ${color}` : "none",
-                }}
-                disabled={isLocked}
-              />
-            ))}
+          <div className="flex items-center gap-2">
+            <div
+              className="w-6 h-6 rounded-md border cursor-pointer"
+              style={{ background: t.color || "#64748b" }}
+              title="Current color"
+            />
+            <div className="flex items-center gap-2">
+              {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444"].map((c) => (
+                <button
+                  key={c}
+                  className={`w-6 h-6 rounded-md border hover:scale-105 transition-transform ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                  style={{ background: c }}
+                  onClick={() => {
+                    if (!isLocked) {
+                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
+                      pushHistory();
+                    }
+                  }}
+                  disabled={isLocked}
+                  title="Set color"
+                />
+              ))}
+            </div>
+            <Palette size={14} className="opacity-40" />
           </div>
         </div>
 
-        {/* Columns Section */}
+        {/* Columns */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
               Columns
             </label>
-            {!isLocked && (
-              <button
-                onClick={() => {
-                  const newColumn: Column = {
-                    id: generateId(),
-                    name: "new_column",
-                    type: "VARCHAR",
-                    isPk: false,
-                    isFk: false,
-                  };
-                  setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, columns: [...x.columns, newColumn] } : x)));
-                  pushHistory();
-                }}
-                className="p-1 hover:bg-indigo-500/15 rounded text-indigo-500 transition-all text-[10px]"
-                title="Add Column"
-              >
-                + Add
-              </button>
-            )}
+            <button
+              onClick={() => {
+                if (!isLocked) {
+                  setTables((prev) =>
+                    prev.map((x) =>
+                      x.id === t.id
+                        ? {
+                            ...x,
+                            columns: [
+                              ...x.columns,
+                              { id: generateId(), name: "new_col", type: "VARCHAR", isPk: false, isFk: false },
+                            ],
+                          }
+                        : x
+                    )
+                  );
+                }
+              }}
+              disabled={isLocked}
+              className={`text-indigo-500 text-[10px] font-bold hover:underline hover:text-indigo-600 transition-colors duration-200 ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+              onMouseUp={() => pushHistory()}
+            >
+              + Add column
+            </button>
           </div>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {t.columns.map((col) => (
-              <div key={col.id} className={`p-2.5 rounded-lg border transition-all ${isDarkMode ? "border-slate-700 bg-slate-800/40" : "border-slate-300 bg-slate-100/40"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <input
-                    type="text"
-                    value={col.name}
-                    onChange={(e) =>
-                      !isLocked &&
-                      setTables((prev) =>
-                        prev.map((x) =>
-                          x.id === t.id
-                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, name: e.target.value } : c)) }
-                            : x
-                        )
+
+          {t.columns.map((col) => (
+            <div
+              key={col.id}
+              className={`p-3 rounded-xl border space-y-2 transition-all duration-200 ${
+                isDarkMode ? "bg-slate-950 border-slate-700 hover:bg-slate-900 hover:border-slate-600" : "bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-300"
+              } ${isLocked ? "opacity-60" : ""}`}
+            >
+              <div className="flex gap-2">
+                <input
+                  className={`bg-transparent text-xs w-full outline-none font-bold transition-colors duration-200 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  } ${isLocked ? "cursor-not-allowed" : ""}`}
+                  value={col.name}
+                  onChange={(e) =>
+                    !isLocked && setTables((prev) =>
+                      prev.map((x) =>
+                        x.id === t.id
+                          ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, name: e.target.value } : c)) }
+                          : x
                       )
+                    )
+                  }
+                  onBlur={() => pushHistory()}
+                  disabled={isLocked}
+                />
+                <button
+                  className={`transition-colors duration-200 ${isDarkMode ? "text-slate-500 hover:text-red-500" : "text-slate-600 hover:text-red-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    if (!isLocked) {
+                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, columns: x.columns.filter((c) => c.id !== col.id) } : x)));
                     }
-                    onBlur={() => pushHistory()}
-                    placeholder="Column name"
-                    className={`flex-1 text-xs px-2 py-1 rounded outline-none border transition-all focus:ring-2 focus:ring-indigo-500 ${
-                      isDarkMode
-                        ? "bg-slate-900 border-slate-700 text-slate-100 focus:border-indigo-500"
-                        : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                    } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-                    disabled={isLocked}
-                  />
-
-                  {!isLocked && (
-                    <button
-                      onClick={() => {
-                        setTables((prev) =>
-                          prev.map((x) =>
-                            x.id === t.id ? { ...x, columns: x.columns.filter((c) => c.id !== col.id) } : x
-                          )
-                        );
-                        pushHistory();
-                      }}
-                      className="p-1 rounded hover:bg-red-500/15 text-red-500 transition-all"
-                      title="Delete Column"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <select
-                    value={col.type}
-                    onChange={(e) =>
-                      !isLocked &&
-                      setTables((prev) =>
-                        prev.map((x) =>
-                          x.id === t.id
-                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, type: e.target.value } : c)) }
-                            : x
-                        )
-                      )
-                    }
-                    onBlur={() => pushHistory()}
-                    className={`flex-1 text-xs px-2 py-1 rounded outline-none border transition-all focus:ring-2 focus:ring-indigo-500 ${
-                      isDarkMode
-                        ? "bg-slate-900 border-slate-700 text-slate-100 focus:border-indigo-500"
-                        : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                    } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-                    disabled={isLocked}
-                  >
-                    <option>INT</option>
-                    <option>VARCHAR</option>
-                    <option>TEXT</option>
-                    <option>BOOL</option>
-                    <option>UUID</option>
-                  </select>
-
-                  <label className={`flex items-center gap-1 cursor-pointer text-xs ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`} title="Primary Key">
-                    <input
-                      type="checkbox"
-                      checked={col.isPk}
-                      onChange={(e) =>
-                        !isLocked &&
-                        setTables((prev) =>
-                          prev.map((x) =>
-                            x.id === t.id
-                              ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
-                              : x
-                          )
-                        )
-                      }
-                      onBlur={() => pushHistory()}
-                      disabled={isLocked}
-                      className="accent-amber-500"
-                    />
-                    <Key size={10} className="text-amber-500" />
-                  </label>
-                </div>
+                  }}
+                  disabled={isLocked}
+                  onMouseUp={() => pushHistory()}
+                >
+                  <X size={14} />
+                </button>
               </div>
-            ))}
-          </div>
+
+              <div className="flex gap-3">
+                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={col.isPk}
+                    onChange={(e) =>
+                      !isLocked && setTables((prev) =>
+                        prev.map((x) =>
+                          x.id === t.id
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
+                            : x
+                        )
+                      )
+                    }
+                    disabled={isLocked}
+                    onMouseUp={() => pushHistory()}
+                  />{" "}
+                  PK
+                </label>
+
+                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={col.isFk}
+                    onChange={(e) =>
+                      !isLocked && setTables((prev) =>
+                        prev.map((x) =>
+                          x.id === t.id
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: e.target.checked } : c)) }
+                            : x
+                        )
+                      )
+                    }
+                    disabled={isLocked}
+                    onMouseUp={() => pushHistory()}
+                  />{" "}
+                  FK
+                </label>
+
+                <select
+                  className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  value={col.type}
+                  onChange={(e) =>
+                    !isLocked && setTables((prev) =>
+                      prev.map((x) =>
+                        x.id === t.id
+                          ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, type: e.target.value } : c)) }
+                          : x
+                      )
+                    )
+                  }
+                  disabled={isLocked}
+                  onMouseUp={() => pushHistory()}
+                >
+                  <option>INT</option>
+                  <option>UUID</option>
+                  <option>VARCHAR</option>
+                  <option>TEXT</option>
+                  <option>BOOL</option>
+                </select>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Relationships Section */}
-        <div className="space-y-2">
-          <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Relationships
-          </label>
-          {selectedTableRelationships.length > 0 ? (
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {selectedTableRelationships.map((rel) => {
-                const isForeignTableId = rel.sourceTableId === t.id;
-                const otherTableId = isForeignTableId ? rel.targetTableId : rel.sourceTableId;
-                const otherTable = tables.find((x) => x.id === otherTableId);
-
+        {/* Feature 2: Relationships Section */}
+        {selectedTableRelationships.length > 0 && (
+          <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+            <label className={`text-[10px] font-bold uppercase block mb-2 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              {selectedTableRelationships.length} Relationship{selectedTableRelationships.length !== 1 ? "s" : ""}
+            </label>
+            <div className="space-y-2 mb-4">
+              {selectedTableRelationships.map((r) => {
+                const isSource = r.sourceTableId === selectedTableId;
+                const targetId = isSource ? r.targetTableId : r.sourceTableId;
+                const targetTable = tables.find(t => t.id === targetId);
+                
                 return (
                   <div
-                    key={rel.id}
-                    onClick={() => setSelectedEdgeId(rel.id)}
-                    className={`p-2 rounded-lg border cursor-pointer transition-all ${
-                      selectedEdgeId === rel.id
-                        ? isDarkMode
-                          ? "border-indigo-500 bg-indigo-500/10"
-                          : "border-indigo-400 bg-indigo-400/10"
-                        : isDarkMode
-                        ? "border-slate-700 bg-slate-800/40 hover:border-slate-600"
-                        : "border-slate-300 bg-slate-100/40 hover:border-slate-200"
+                    key={r.id}
+                    onClick={() => setSelectedEdgeId(r.id)}
+                    className={`p-2 rounded-lg text-xs cursor-pointer border transition-all ${
+                      selectedEdgeId === r.id
+                        ? "bg-indigo-500/20 border-indigo-500 text-indigo-300"
+                        : isDarkMode 
+                          ? "border-indigo-700/50 text-indigo-300 hover:bg-indigo-900/30 hover:border-indigo-600"
+                          : "border-indigo-300/50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400"
                     }`}
                   >
-                    <div className="flex items-center justify-between text-[11px] font-semibold">
-                      <span className={isForeignTableId ? "text-indigo-400" : "text-slate-400"}>{otherTable?.name || "?"}</span>
-                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-300"}`}>
-                        {isForeignTableId ? "→" : "←"}
-                      </span>
+                    <div className="font-bold flex items-center gap-1">
+                      {isSource ? "→" : "←"} {targetTable?.name || "Unknown"}
                     </div>
-                    <input
-                      type="text"
-                      value={rel.label || ""}
-                      onChange={(e) => {
-                        setRelations((prev) =>
-                          prev.map((r) => (r.id === rel.id ? { ...r, label: e.target.value || "" } : r))
-                        );
-                      }}
-                      onBlur={() => pushHistory()}
-                      onClickCapture={(e) => e.stopPropagation()}
-                      placeholder="Label (optional)"
-                      className={`w-full mt-1 text-xs px-2 py-1 rounded outline-none border transition-all focus:ring-2 focus:ring-indigo-500 ${
-                        isDarkMode
-                          ? "bg-slate-900 border-slate-700 text-slate-100 focus:border-indigo-500"
-                          : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                      } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-                      disabled={isLocked}
-                    />
-
-                    {!isLocked && (
-                      <div className="flex gap-1 mt-1.5">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRelations((prev) =>
-                              prev.map((r) =>
-                                r.id === rel.id
-                                  ? { ...r, lineType: rel.lineType === "curved" ? "straight" : "curved" }
-                                  : r
-                              )
-                            );
-                            pushHistory();
-                          }}
-                          className={`flex-1 text-[9px] px-2 py-1 rounded transition-all ${
-                            rel.lineType === "curved"
-                              ? "bg-indigo-500/20 text-indigo-400"
-                              : isDarkMode
-                              ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                              : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                          }`}
-                        >
-                          {rel.lineType === "curved" ? "Curved" : "Straight"}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRelations((prev) =>
-                              prev.map((r) =>
-                                r.id === rel.id
-                                  ? { ...r, isDashed: !rel.isDashed }
-                                  : r
-                              )
-                            );
-                            pushHistory();
-                          }}
-                          className={`flex-1 text-[9px] px-2 py-1 rounded transition-all ${
-                            rel.isDashed
-                              ? "bg-indigo-500/20 text-indigo-400"
-                              : isDarkMode
-                              ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                              : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                          }`}
-                        >
-                          {rel.isDashed ? "Dashed" : "Solid"}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleRelation(rel.sourceTableId, rel.targetTableId);
-                          }}
-                          className="flex-1 text-[9px] px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
+                    {r.label && <div className="text-[9px] opacity-75 mt-1">FK: {r.label}</div>}
+                    <div className="text-[8px] opacity-50 mt-1">
+                      {r.lineType === "curved" ? "Curved" : "Straight"} {r.isDashed ? "• Dashed" : ""}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          ) : (
-            <p className={`text-[11px] opacity-60 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>No relationships yet</p>
-          )}
+          </div>
+        )}
 
-          {!isLocked && (
-            <div className="space-y-2 pt-2">
-              <input
-                type="text"
-                value={connectTableSearch}
-                onChange={(e) => setConnectTableSearch(e.target.value)}
-                placeholder="Search to connect..."
-                className={`w-full text-xs px-2 py-1 rounded outline-none border transition-all focus:ring-2 focus:ring-indigo-500 ${
-                  isDarkMode
-                    ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                }`}
-              />
-              {connectTableSearch && (
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {tables
-                    .filter(
-                      (x) =>
-                        x.id !== t.id &&
-                        x.name.toLowerCase().includes(connectTableSearch.toLowerCase()) &&
-                        !selectedTableRelationships.find(
-                          (r) =>
-                            (r.sourceTableId === t.id && r.targetTableId === x.id) ||
-                            (r.sourceTableId === x.id && r.targetTableId === t.id)
-                        )
-                    )
-                    .map((x) => (
-                      <button
-                        key={x.id}
-                        onClick={() => {
-                          toggleRelation(t.id, x.id);
-                          setConnectTableSearch("");
-                        }}
-                        className={`w-full text-xs px-2 py-1 rounded text-left transition-all ${
-                          isDarkMode
-                            ? "bg-slate-700 hover:bg-indigo-600 text-slate-100"
-                            : "bg-slate-200 hover:bg-indigo-400 text-slate-900 hover:text-white"
-                        }`}
-                      >
-                        + Connect to {x.name}
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Connect to table */}
+        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+          <label className={`text-[10px] font-bold uppercase block mb-3 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Connect to table
+          </label>
+          <input
+            type="text"
+            placeholder="Search tables..."
+            value={connectTableSearch}
+            onChange={(e) => setConnectTableSearch(e.target.value)}
+            className={`w-full px-3 py-2 rounded-lg text-xs mb-3 border outline-none transition-all duration-200 ${
+              isDarkMode
+                ? "bg-slate-900 border-slate-700 text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            disabled={isLocked}
+          />
+          <div className="grid grid-cols-1 gap-2">
+            {tables
+              .filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase()))
+              .map((target) => {
+                const isLinked = relations.some(
+                  (r) =>
+                    (r.sourceTableId === t.id && r.targetTableId === target.id) ||
+                    (r.sourceTableId === target.id && r.targetTableId === t.id)
+                );
+                return (
+                  <button
+                    key={target.id}
+                    onClick={() => !isLocked && toggleRelation(t.id, target.id)}
+                    disabled={isLocked}
+                    className={`text-left px-3 py-2 rounded-lg text-xs border transition-all duration-200 ${
+                      isLocked ? "opacity-50 cursor-not-allowed" : ""
+                    } ${
+                      isLinked
+                        ? isDarkMode
+                          ? "bg-indigo-900/40 border-indigo-600 text-indigo-200 hover:bg-indigo-900/60"
+                          : "bg-indigo-100 border-indigo-400 text-indigo-900 hover:bg-indigo-200"
+                        : isDarkMode
+                        ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600"
+                        : "border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400"
+                    }`}
+                  >
+                    {isLinked ? "✓ " : ""}Link to {target.name}
+                  </button>
+                );
+              })}
+            {tables.filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase())).length === 0 && (
+              <div className={`text-xs py-3 text-center transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                {connectTableSearch.length > 0 ? "No tables found" : "No other tables available"}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Feature 4: Comments Section */}
-        <div className="space-y-2 border-t pt-4">
-          <div className="flex items-center justify-between">
-            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 flex items-center gap-1 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-              <MessageSquare size={12} /> Comments
+        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+          <div className="flex items-center justify-between mb-3">
+            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              <MessageSquare size={12} />
+              Comments {comments.length > 0 && `(${comments.length})`}
             </label>
           </div>
 
-          <div className="space-y-1.5 max-h-32 overflow-y-auto">
-            {commentsLoading ? (
-              <div className="text-xs opacity-60">Loading comments...</div>
-            ) : comments.length > 0 ? (
-              comments.map((c) => (
-                <div key={c.id} className={`p-2 rounded-lg text-xs space-y-1 ${isDarkMode ? "bg-slate-800/40 border border-slate-700" : "bg-slate-100/40 border border-slate-300"}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-indigo-400">{c.user_email?.split("@")[0]}</span>
-                    {!isLocked && (
-                      <button
-                        onClick={() => deleteComment(c.id)}
-                        className="text-red-500 hover:text-red-400 transition-all"
-                      >
-                        <X size={10} />
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-slate-300 text-[10px]">{c.content}</p>
-                </div>
-              ))
-            ) : (
-              <p className={`text-[10px] opacity-60 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>No comments yet</p>
-            )}
-          </div>
-
+          {/* Add comment form */}
           {!isLocked && (
-            <div className="flex gap-1">
+            <div className="mb-4 space-y-2">
               <textarea
-                value={newCommentText}
-                onChange={(e) => setNewCommentText(e.target.value)}
-                placeholder="Add a comment..."
-                className={`flex-1 text-xs px-2 py-1 rounded outline-none border transition-all focus:ring-2 focus:ring-indigo-500 resize-none ${
+                className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
                   isDarkMode
                     ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
                     : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
                 }`}
                 rows={2}
+                placeholder="Add a comment..."
+                value={newCommentText}
+                onChange={(e) => setNewCommentText(e.target.value)}
               />
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (newCommentText.trim()) {
-                    addComment(newCommentText);
-                    setNewCommentText("");
+                    try {
+                      await addComment(newCommentText);
+                      setNewCommentText("");
+                      push({ title: "Comment added", type: "success" });
+                    } catch (err) {
+                      push({ title: "Failed to add comment", type: "error" });
+                    }
                   }
                 }}
-                disabled={!newCommentText.trim()}
-                className="px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-semibold"
+                disabled={!newCommentText.trim() || commentsLoading}
+                className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
-                Post
+                Post Comment
               </button>
             </div>
           )}
+
+          {/* Comments list */}
+          {commentsLoading ? (
+            <div className={`text-xs text-center py-2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+              Loading comments...
+            </div>
+          ) : comments.length === 0 ? (
+            <div className={`text-xs text-center py-4 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+              No comments yet
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {comments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className={`p-2.5 rounded-lg border transition-all duration-200 ${
+                    isDarkMode ? "bg-slate-950/50 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                        {comment.author_email?.split('@')}
+                      </div>
+                      <div className={`text-xs my-1.5 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                        {comment.content}
+                      </div>
+                      <div className={`text-[8px] ${isDarkMode ? "text-slate-600" : "text-slate-500"}`}>
+                        {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    {comment.author_id === user.id && (
+                      <button
+                        onClick={() => deleteComment(comment.id)}
+                        className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
+                        title="Delete comment"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Feature 5: Sample Data */}
+        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+          <button
+            onClick={() => {
+              if (!sampleDataShown) {
+                const data = generateSampleData(t.columns, 5);
+                setSampleData(data);
+                setSampleDataShown(true);
+              } else {
+                setSampleDataShown(false);
+              }
+            }}
+            className={`w-full px-3 py-2 rounded-lg text-xs font-bold border transition-all duration-200 flex items-center justify-center gap-2 ${
+              sampleDataShown
+                ? "bg-emerald-500/10 border-emerald-500 text-emerald-500"
+                : isDarkMode 
+                  ? "border-slate-700 text-slate-400 hover:bg-slate-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Zap size={12} />
+            {sampleDataShown ? "Hide" : "Show"} Sample Data
+          </button>
+
+          {sampleDataShown && sampleData.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {/* Sample data mini table */}
+              <div className={`overflow-x-auto rounded-lg border transition-all duration-200 ${
+                isDarkMode ? "border-slate-800 bg-slate-950/30" : "border-slate-200 bg-slate-50"
+              }`}>
+                <table className="w-full text-[9px]">
+                  <thead>
+                    <tr className={`border-b transition-colors duration-200 ${isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-slate-100"}`}>
+                      {t.columns.map((col) => (
+                        <th key={col.id} className={`px-2 py-1.5 text-left font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                          <div className="truncate">{col.name}</div>
+                          <div className={`text-[8px] font-normal opacity-60 mt-0.5 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
+                            {col.type}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sampleData.slice(0, 3).map((row, idx) => (
+                      <tr key={idx} className={`border-b transition-colors duration-200 hover:bg-opacity-50 ${isDarkMode ? "border-slate-800 hover:bg-slate-900/20" : "border-slate-100 hover:bg-slate-100"}`}>
+                        {t.columns.map((col) => (
+                          <td key={col.id} className={`px-2 py-1 ${isDarkMode ? "text-slate-400" : "text-slate-600"} truncate max-w-xs`}>
+                            {String(row[col.name])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Quick copy buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const json = sampleDataToJSON(t.name, t.columns, sampleData);
+                    navigator.clipboard.writeText(json);
+                    push({ title: "JSON copied to clipboard", type: "success" });
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                    isDarkMode ? "border-slate-700 text-slate-400 hover:bg-slate-800" : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  Copy JSON
+                </button>
+                <button
+                  onClick={() => {
+                    const sql = sampleDataToSQLInsert(t.name, t.columns, sampleData);
+                    navigator.clipboard.writeText(sql);
+                    push({ title: "SQL INSERT copied", type: "success" });
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                    isDarkMode ? "border-slate-700 text-slate-400 hover:bg-slate-800" : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  Copy SQL
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Delete buttons */}
+        <div className="flex items-center gap-2 pt-4 border-t transition-colors duration-300" style={{borderColor: isDarkMode ? "#1e293b" : "#e2e8f0"}}>
+          <button
+            onClick={() => duplicateTable(t.id)}
+            disabled={isLocked}
+            className={`flex-1 py-2 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200`}
+          >
+            Duplicate table
+          </button>
+          <button
+            onClick={() => {
+              if (!isLocked) {
+                setTables(tables.filter((x) => x.id !== t.id));
+                setRelations(relations.filter((r) => r.sourceTableId !== t.id && r.targetTableId !== t.id));
+                setSelectedTableId(null);
+                setMultiSelectedTableIds(new Set());
+                pushHistory();
+                push({ title: "Table deleted", type: "info" });
+              }
+            }}
+            disabled={isLocked}
+            className="flex-1 py-2 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg hover:bg-red-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          >
+            Delete table
+          </button>
         </div>
       </div>
-              );
-              })()
-            ) : selectedEdgeId ? (
+    );
+  })()
+) : selectedEdgeId ? (
               (() => {
                 const r = relations.find((x) => x.id === selectedEdgeId)!;
-                const s = tables.find((x) => x.id === r.sourceTableId)!;
-                const t = tables.find((x) => x.id === r.targetTableId)!;
-
                 return (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div>
-                      <h4 className={`text-xs font-bold uppercase mb-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                        Relationship
-                      </h4>
-                      <div className={`text-sm font-semibold space-y-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                        <div>{s.name}</div>
-                        <div className={`text-center text-lg ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                          →
-                        </div>
-                        <div>{t.name}</div>
+                    <div className="space-y-2">
+                      <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>Edge label</label>
+                      <input
+                        className={`w-full rounded-lg px-3 py-2 text-sm outline-none border focus:ring-2 focus:ring-indigo-500 transition-all duration-200 ${
+                          isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100 focus:bg-slate-900 focus:border-indigo-500" : "bg-white border-slate-300 text-slate-900 focus:bg-slate-50 focus:border-indigo-400"
+                        }`}
+                        placeholder="e.g. user_id"
+                        value={r.label || ""}
+                        onChange={(e) => setRelations((prev) => prev.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))}
+                        onBlur={() => pushHistory()}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className={`text-[10px] font-bold uppercase block transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>Line style</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setRelations((prev) => prev.map((x) => (x.id === r.id ? { ...x, isDashed: !x.isDashed } : x)))}
+                          className={`flex-1 py-2 rounded-lg text-xs border transition-all ${
+                            r.isDashed ? "bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20" : isDarkMode ? "border-slate-700 text-slate-400" : "border-slate-200"
+                          }`}
+                          onMouseUp={() => pushHistory()}
+                        >
+                          Dotted
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            setRelations((prev) =>
+                              prev.map((x) => (x.id === r.id ? { ...x, lineType: x.lineType === "curved" ? "straight" : "curved" } : x))
+                            )
+                          }
+                          className={`flex-1 py-2 rounded-lg text-xs border transition-all duration-200 ${
+                            r.lineType === "straight"
+                              ? "bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20"
+                              : isDarkMode
+                              ? "border-slate-700 text-slate-400 hover:bg-slate-800"
+                              : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                          }`}
+                          onMouseUp={() => pushHistory()}
+                        >
+                          Straight
+                        </button>
+                      </div>
+
+                      <div className={`text-[11px] leading-relaxed transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
+                        Tip: Click an edge to select it, then drag the small handle to bend/route it.
                       </div>
                     </div>
 
-                    {!isLocked && (
-                      <div className="space-y-2">
-                        <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                          Label
-                        </label>
-                        <input
-                          type="text"
-                          value={r.label || ""}
-                          onChange={(e) => setRelations((prev) => prev.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))}
-                          onBlur={() => pushHistory()}
-                          placeholder="FK column name..."
-                          className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none border transition-all ${
-                            isDarkMode
-                              ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
-                              : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                          }`}
-                        />
-                      </div>
-                    )}
-
-                    {!isLocked && (
-                      <div className="space-y-2">
-                        <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                          Line style
-                        </label>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setRelations((prev) =>
-                                prev.map((x) => (x.id === r.id ? { ...x, lineType: "curved" } : x))
-                              );
-                              pushHistory();
-                            }}
-                            className={`flex-1 px-3 py-2 rounded-lg font-semibold text-xs transition-all ${
-                              r.lineType === "curved"
-                                ? "bg-indigo-600 text-white"
-                                : isDarkMode
-                                ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                                : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                            }`}
-                          >
-                            Curved
-                          </button>
-                          <button
-                            onClick={() => {
-                              setRelations((prev) =>
-                                prev.map((x) => (x.id === r.id ? { ...x, lineType: "straight" } : x))
-                              );
-                              pushHistory();
-                            }}
-                            className={`flex-1 px-3 py-2 rounded-lg font-semibold text-xs transition-all ${
-                              r.lineType === "straight"
-                                ? "bg-indigo-600 text-white"
-                                : isDarkMode
-                                ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                                : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                            }`}
-                          >
-                            Straight
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {!isLocked && (
-                      <div className="space-y-2">
-                        <button
-                          onClick={() => {
-                            setRelations((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, isDashed: !r.isDashed } : x))
-                            );
-                            pushHistory();
-                          }}
-                          className={`w-full px-3 py-2 rounded-lg font-semibold text-xs transition-all ${
-                            r.isDashed
-                              ? "bg-indigo-600 text-white"
-                              : isDarkMode
-                              ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                              : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                          }`}
-                        >
-                          {r.isDashed ? "Dashed" : "Solid"}
-                        </button>
-                      </div>
-                    )}
-
-                    {!isLocked && (
-                      <button
-                        onClick={() => {
-                          setRelations((prev) => prev.filter((x) => x.id !== r.id));
-                          setSelectedEdgeId(null);
-                          pushHistory();
-                          push({ title: "Relationship removed", type: "info" });
-                        }}
-                        className="w-full px-3 py-2 rounded-lg font-semibold text-xs bg-red-600 text-white hover:bg-red-700 transition-all"
-                      >
-                        Delete Relationship
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setRelations(relations.filter((x) => x.id !== r.id));
+                        setSelectedEdgeId(null);
+                        pushHistory();
+                        push({ title: "Connection removed", type: "info" });
+                      }}
+                      className="w-full py-2 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg hover:bg-red-600 hover:text-white transition-all duration-200"
+                    >
+                      Remove connection
+                    </button>
                   </div>
                 );
               })()
             ) : (
-              <div className={`text-center py-12 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                <p className="text-sm font-semibold">Select a table or relationship to edit</p>
+              <div className={`space-y-5`}>
+                <div className={`h-full flex flex-col items-center justify-center text-center select-none transition-colors duration-300 ${isDarkMode ? "text-slate-700" : "text-slate-400"}`}>
+                  <MousePointer2 size={40} className="mb-4" />
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    Select an element
+                    <br />
+                    to edit settings
+                  </p>
+                </div>
+
+                <div className={`space-y-2`}>
+                  <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>Quick templates</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {templates.map((tpl) => (
+                      <button
+                        key={tpl.name}
+                        onClick={tpl.apply}
+                        className={`text-left px-3 py-2 rounded-lg text-xs border transition-all duration-200 ${
+                          isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600" : "border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400"
+                        }`}
+                      >
+                        {tpl.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
+          </div>
+
+          <div className={`p-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearAllSelections}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                  isDarkMode ? "border-slate-700 hover:bg-slate-800 hover:border-slate-600 text-slate-300" : "border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700"
+                }`}
+              >
+                Clear selection
+              </button>
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className={`p-2 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                  isDarkMode ? "border-slate-700 hover:bg-slate-800 text-slate-300" : "border-slate-300 hover:bg-slate-100 text-slate-700"
+                }`}
+                title="Collapse"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* TOASTS */}
-      <div className="fixed bottom-6 left-6 space-y-2 pointer-events-none z-40">
+      {/* Toasts */}
+      <div className="pointer-events-none fixed bottom-4 right-4 flex flex-col gap-2 z-[60]">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`px-4 py-3 rounded-lg text-sm font-semibold backdrop-blur-xl border pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-300 ${
+            className={`pointer-events-auto px-4 py-2 rounded-lg shadow-lg backdrop-blur-md border text-sm transition-all ${
               t.type === "success"
                 ? isDarkMode
-                  ? "bg-emerald-900/60 border-emerald-700 text-emerald-200"
+                  ? "bg-emerald-900/50 border-emerald-700 text-emerald-200"
                   : "bg-emerald-100 border-emerald-300 text-emerald-800"
                 : t.type === "error"
                 ? isDarkMode
-                  ? "bg-red-900/60 border-red-700 text-red-200"
-                  : "bg-red-100 border-red-300 text-red-800"
+                  ? "bg-rose-900/50 border-rose-700 text-rose-200"
+                  : "bg-rose-100 border-rose-300 text-rose-800"
                 : isDarkMode
                 ? "bg-slate-900/60 border-slate-700 text-slate-200"
-                : "bg-slate-100 border-slate-300 text-slate-800"
+                : "bg-white/70 border-slate-300 text-slate-800"
             }`}
           >
-            <p>{t.title}</p>
-            {t.description && <p className="text-xs opacity-75">{t.description}</p>}
+            <div className="font-semibold">{t.title}</div>
+            {t.description && <div className="text-xs opacity-80">{t.description}</div>}
           </div>
         ))}
       </div>
@@ -2252,77 +2380,144 @@ const selectedTableRelationships = useMemo(() => {
   );
 }
 
-/** --- APP --- **/
 export default function App() {
-  const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(null);
-  const { diagrams, currentDiagram, setCurrentDiagram, loading: syncLoading, syncing } = useCloudSync(user?.id);
+  const { user, loading: authLoading, isAuthenticated, signOut } = useAuth();
+  const [selectedDiagram, setSelectedDiagram] = useState<ERDDiagram | null>(null);
+  const [showSelector, setShowSelector] = useState(true);
+  
+  // Use Supabase user id for cloud sync
+  const userId = user?.id;
+  const {
+    diagrams,
+    loading: cloudLoading,
+    syncing,
+    teamId,
+    createDiagram,
+    saveDiagram,
+    deleteDiagram,
+    loadDiagram,
+    profileExists,
+    error: cloudError,
+  } = useCloudSync(userId);
+  const [bootstrapped, setBootstrapped] = useState(false);
+  // useEffect(() => {
+  //   if (!authLoading && !isAuthenticated) {
+  //     navigate('/auth');
+  //   }
+  // }, [authLoading, isAuthenticated, navigate]);
+  useEffect(() => {
+  let mounted = true;
 
-  if (loading) {
+  (async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!mounted) return;
+
+    const session = data.session;
+
+    // PASSWORD RECOVERY HAS HIGHEST PRIORITY
+    if (
+      session &&
+      window.location.hash.includes("type=recovery")
+    ) {
+      navigate("/reset-password", { replace: true });
+      setBootstrapped(true);
+      return;
+    }
+
+    // NOT AUTHENTICATED
+    if (!session) {
+      navigate("/auth", { replace: true });
+      setBootstrapped(true);
+      return;
+    }
+
+    // AUTHENTICATED
+    navigate("/diagrams", { replace: true });
+    setBootstrapped(true);
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [navigate]);
+  if (!bootstrapped) {
+    return null;
+  }
+
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950">
-        <div className="animate-spin">
-          <Loader2 size={48} className="text-indigo-500" />
-        </div>
+        <Loader2 className="animate-spin text-slate-400" size={32} />
       </div>
     );
   }
 
-  if (!user) {
-    navigate("/auth");
+  if (!isAuthenticated || !user) {
     return null;
   }
 
-  const handleSave = (updates: any) => {
-    if (currentDiagram) {
-      setCurrentDiagram({ ...currentDiagram, ...updates });
+  const handleSave = async (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => {
+    if (selectedDiagram) {
+      await saveDiagram(selectedDiagram.id, updates);
     }
   };
 
-  const handleSelectDiagram = (diagram: ERDDiagram) => {
-    setCurrentDiagram(diagram);
-    setSelectedDiagramId(diagram.id);
+  const handleBack = () => {
+    setSelectedDiagram(null);
+    setShowSelector(true);
   };
 
-  const handleCreateDiagram = async () => {
-    const newDiagram: ERDDiagram = {
-      id: generateId(),
-      name: "New Diagram",
-      tables: [],
-      relations: [],
-      viewport: { x: 0, y: 0, zoom: 1 },
-      is_dark_mode: true,
-      is_locked: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setCurrentDiagram(newDiagram);
-    setSelectedDiagramId(newDiagram.id);
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
   };
 
-  return selectedDiagramId && currentDiagram ? (
+  // Show diagram selector
+  if (showSelector && !selectedDiagram) {
+    return (
+      <DiagramSelector
+        diagrams={diagrams}
+        loading={cloudLoading || !profileExists}
+        error={cloudError}
+        teamId={teamId}
+        onSelect={async (diagram) => {
+          const loaded = await loadDiagram(diagram.id);
+          if (loaded) {
+            setSelectedDiagram(loaded);
+            setShowSelector(false);
+          }
+        }}
+        onCreate={async () => {
+          const newDiagram = await createDiagram('New Diagram');
+          if (newDiagram) {
+            setSelectedDiagram(newDiagram);
+            setShowSelector(false);
+          }
+        }}
+        onDelete={async (id) => {
+          await deleteDiagram(id);
+        }}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  const appUser: AppUser = {
+    id: user.id,
+    email: user.email,
+    name: user.user_metadata?.display_name || user.email,
+    user_metadata: user.user_metadata,
+  };
+
+  return (
     <ERDBuilder
-      user={user}
-      diagram={currentDiagram}
+      user={appUser}
+      diagram={selectedDiagram}
       onSave={handleSave}
-      onBack={() => {
-        setSelectedDiagramId(null);
-        setCurrentDiagram(null);
-      }}
+      onBack={handleBack}
       syncing={syncing}
-      onLogout={() => {
-        setSelectedDiagramId(null);
-        navigate("/auth");
-      }}
-    />
-  ) : (
-    <DiagramSelector
-      diagrams={diagrams}
-      onSelect={handleSelectDiagram}
-      onCreate={handleCreateDiagram}
-      onLogout={() => navigate("/auth")}
-      loading={syncLoading}
+      onLogout={handleLogout}
     />
   );
 }
