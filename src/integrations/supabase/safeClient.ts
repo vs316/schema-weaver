@@ -22,13 +22,15 @@ export function getResolvedBackendConfig(): ResolvedBackendConfig {
     import.meta.env.VITE_SUPABASE_URL ||
     FALLBACK_URL;
 
+  // Support both ANON_KEY and PUBLISHABLE_KEY env var names
   const publishableKey =
-    import.meta.env.VITE_SUPABASE_ANON_KEY ||   // ✅ FIX
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
     FALLBACK_PUBLISHABLE_KEY;
 
   const hasEnv = Boolean(
     import.meta.env.VITE_SUPABASE_URL &&
-    import.meta.env.VITE_SUPABASE_ANON_KEY
+    (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY)
   );
 
   return {
