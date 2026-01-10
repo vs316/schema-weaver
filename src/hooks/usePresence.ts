@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-
 export interface PresenceUser {
   id: string;
   name: string;
@@ -12,23 +11,12 @@ export interface PresenceUser {
   cursor?: { x: number; y: number };
 }
 
-interface PresenceState {
-  [key: string]: PresenceUser[];
-}
-
 // Generate consistent color from user ID
 function generateUserColor(userId: string): string {
   const colors = [
-    '#ef4444', // red
-    '#f97316', // orange
-    '#eab308', // yellow
-    '#22c55e', // green
-    '#14b8a6', // teal
-    '#3b82f6', // blue
-    '#8b5cf6', // violet
-    '#ec4899', // pink
+    '#ef4444', '#f97316', '#eab308', '#22c55e',
+    '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',
   ];
-  
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash);
@@ -39,33 +27,36 @@ function generateUserColor(userId: string): string {
 export function usePresence(diagramId: string | null, userId?: string, userName?: string) {
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const cursorUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const usersRef = useRef<Map<string, PresenceUser>>(new Map());
+  const usersMapRef = useRef<Map<string, PresenceUser>>(new Map());
+  // Cursor updates are throttled via interval
+  const pendingCursorUpdate = useRef<{ x: number; y: number } | null>(null);
+  const cursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Join presence channel
   useEffect(() => {
     if (!diagramId || !userId) return;
 
+    const myColor = generateUserColor(userId);
+    
     const channel = supabase.channel(`presence:${diagramId}`, {
       config: {
-        presence: {
-          key: userId,
-        },
+        presence: { key: userId },
+        broadcast: { self: false }, // Don't receive own broadcasts
       },
     });
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState() as PresenceState;
+        const state = channel.presenceState();
         const activeUsers: PresenceUser[] = [];
         
-        Object.values(state).forEach((presences) => {
+        Object.values(state).forEach((presences: any[]) => {
           presences.forEach((presence) => {
-            // Don't add current user to the list
             if (presence.id !== userId) {
-              // Preserve cursor position from our local tracking
-              const existing = usersRef.current.get(presence.id);
+              // Preserve cursor from our local tracking
+              const existing = usersMapRef.current.get(presence.id);
               activeUsers.push({
                 ...presence,
                 cursor: existing?.cursor || presence.cursor,
@@ -74,93 +65,89 @@ export function usePresence(diagramId: string | null, userId?: string, userName?
           });
         });
         
-        // Update the users map
-        usersRef.current.clear();
-        activeUsers.forEach(u => usersRef.current.set(u.id, u));
-        
-        setUsers(activeUsers);
+        usersMapRef.current.clear();
+        activeUsers.forEach(u => usersMapRef.current.set(u.id, u));
+        setUsers([...activeUsers]);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        console.log('User joined:', newPresences);
+        console.log('[Presence] User joined:', newPresences);
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        console.log('User left:', leftPresences);
-        // Remove left users from our tracking
-        for (const p of leftPresences) {
-          const presence = p as unknown as PresenceUser;
-          if (presence.id) {
-            usersRef.current.delete(presence.id);
+        console.log('[Presence] User left:', leftPresences);
+        for (const p of leftPresences as any[]) {
+          if (p.id) {
+            usersMapRef.current.delete(p.id);
           }
         }
+        setUsers(Array.from(usersMapRef.current.values()));
       })
-      // Listen for cursor broadcasts (separate from presence for high-frequency updates)
+      // Listen for cursor broadcasts from other users
       .on('broadcast', { event: 'cursor' }, ({ payload }) => {
-        if (payload.userId === userId) return; // Ignore our own cursor
+        if (!payload || payload.userId === userId) return;
         
-        // Update cursor position for this user
-        const existing = usersRef.current.get(payload.userId);
-        if (existing) {
-          const updated = { ...existing, cursor: payload.cursor };
-          usersRef.current.set(payload.userId, updated);
-          setUsers(Array.from(usersRef.current.values()));
-        } else {
-          // User might not be in presence yet, create a temporary entry
-          const newUser: PresenceUser = {
-            id: payload.userId,
-            name: payload.userName || 'Anonymous',
-            color: generateUserColor(payload.userId),
-            lastSeen: new Date().toISOString(),
-            cursor: payload.cursor,
-          };
-          usersRef.current.set(payload.userId, newUser);
-          setUsers(Array.from(usersRef.current.values()));
-        }
+        const existing = usersMapRef.current.get(payload.userId);
+        const updatedUser: PresenceUser = existing 
+          ? { ...existing, cursor: payload.cursor, lastSeen: new Date().toISOString() }
+          : {
+              id: payload.userId,
+              name: payload.userName || 'Anonymous',
+              color: generateUserColor(payload.userId),
+              lastSeen: new Date().toISOString(),
+              cursor: payload.cursor,
+            };
+        
+        usersMapRef.current.set(payload.userId, updatedUser);
+        setUsers(Array.from(usersMapRef.current.values()));
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           setIsConnected(true);
           
-          // Track presence
+          // Track our presence
           await channel.track({
             id: userId,
             name: userName || 'Anonymous',
-            color: generateUserColor(userId),
+            color: myColor,
             lastSeen: new Date().toISOString(),
           });
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          setIsConnected(false);
         }
       });
 
     channelRef.current = channel;
 
+    // Set up interval to send pending cursor updates (throttled to ~15fps)
+    cursorIntervalRef.current = setInterval(() => {
+      if (pendingCursorUpdate.current && channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'cursor',
+          payload: {
+            userId,
+            userName: userName || 'Anonymous',
+            cursor: pendingCursorUpdate.current,
+          },
+        });
+        pendingCursorUpdate.current = null;
+      }
+    }, 66); // ~15fps
+
     return () => {
+      if (cursorIntervalRef.current) {
+        clearInterval(cursorIntervalRef.current);
+      }
       channel.unsubscribe();
       channelRef.current = null;
       setIsConnected(false);
-      usersRef.current.clear();
+      usersMapRef.current.clear();
     };
   }, [diagramId, userId, userName]);
 
-  // Update cursor position using broadcast (throttled)
+  // Update cursor position (debounced via interval)
   const updateCursor = useCallback((x: number, y: number) => {
-    if (!channelRef.current || !userId) return;
-
-    // Throttle cursor updates to ~20fps
-    if (cursorUpdateTimeoutRef.current) {
-      clearTimeout(cursorUpdateTimeoutRef.current);
-    }
-
-    cursorUpdateTimeoutRef.current = setTimeout(() => {
-      channelRef.current?.send({
-        type: 'broadcast',
-        event: 'cursor',
-        payload: {
-          userId,
-          userName: userName || 'Anonymous',
-          cursor: { x, y },
-        },
-      });
-    }, 50);
-  }, [userId, userName]);
+    pendingCursorUpdate.current = { x, y };
+  }, []);
 
   return {
     users,

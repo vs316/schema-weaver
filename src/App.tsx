@@ -156,9 +156,13 @@ function ERDBuilder({
 
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
+  const [_panMode, setPanMode] = useState(false); // Shift+P pan mode (visual cue)
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  // Store initial positions for smooth absolute dragging
+  const initialDragPosRef = useRef<{ tableX: number; tableY: number; mouseX: number; mouseY: number } | null>(null);
+  const multiDragOffsetsRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
   const [draggedTableId, setDraggedTableId] = useState<string | null>(null);
 
   const [multiSelectedTableIds, setMultiSelectedTableIds] = useState<Set<string>>(new Set());
@@ -483,13 +487,41 @@ const [sampleData, setSampleData] = useState<any[]>([]);
   }, [selectedTableId, selectedEdgeId, isDarkMode]);
 
   const handleWheel = (e: React.WheelEvent) => {
+    // Zoom centered on mouse position
     const zoomSpeed = 0.001;
     const minZoom = 0.2;
     const maxZoom = 3;
     const delta = -e.deltaY * zoomSpeed;
     const newZoom = clamp(viewport.zoom + delta, minZoom, maxZoom);
-    setViewport((prev) => ({ ...prev, zoom: newZoom }));
+    
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom towards mouse position
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomRatio = newZoom / viewport.zoom;
+        const newX = mouseX - (mouseX - viewport.x) * zoomRatio;
+        const newY = mouseY - (mouseY - viewport.y) * zoomRatio;
+        setViewport({ x: newX, y: newY, zoom: newZoom });
+      }
+    } else {
+      setViewport((prev) => ({ ...prev, zoom: newZoom }));
+    }
   };
+  
+  // Zoom in/out functions for keyboard shortcuts
+  const zoomIn = useCallback(() => {
+    const newZoom = clamp(viewport.zoom * 1.2, 0.2, 3);
+    setViewport((prev) => ({ ...prev, zoom: newZoom }));
+    push({ title: "Zoomed in", description: `${Math.round(newZoom * 100)}%`, type: "info" });
+  }, [viewport.zoom, push]);
+  
+  const zoomOut = useCallback(() => {
+    const newZoom = clamp(viewport.zoom / 1.2, 0.2, 3);
+    setViewport((prev) => ({ ...prev, zoom: newZoom }));
+    push({ title: "Zoomed out", description: `${Math.round(newZoom * 100)}%`, type: "info" });
+  }, [viewport.zoom, push]);
 
   const resetViewport = useCallback(() => {
     setViewport({ x: 0, y: 0, zoom: 0.5 });
@@ -545,21 +577,23 @@ const selectedTableRelationships = useMemo(() => {
 
   const handleTableMouseDown = (e: React.MouseEvent, tableId: string) => {
     // Feature 1: Check if locked
-  if (isLocked) {
-    push({ title: "Diagram is locked", description: "Unlock to edit", type: "info" });
-    return;
-  }
+    if (isLocked) {
+      push({ title: "Diagram is locked", description: "Unlock to edit", type: "info" });
+      return;
+    }
     if (e.button !== 0) return;
     e.stopPropagation();
 
     const table = tables.find((t) => t.id === tableId);
     if (!table || !canvasRef.current) return;
 
+    const currentMultiSelected = e.shiftKey ? multiSelectedTableIds : new Set<string>();
+    
     if (!e.shiftKey) {
-  setMultiSelectedTableIds(new Set());  // ← Clear first, then set single
-  setSelectedTableId(tableId);
-  setConnectTableSearch("");
-} else {
+      setMultiSelectedTableIds(new Set());
+      setSelectedTableId(tableId);
+      setConnectTableSearch("");
+    } else {
       setMultiSelectedTableIds((prev) => {
         const next = new Set(prev);
         if (next.has(tableId)) next.delete(tableId);
@@ -573,6 +607,27 @@ const selectedTableRelationships = useMemo(() => {
     setSelectedEdgeId(null);
 
     const world = toWorld(e.clientX, e.clientY);
+    
+    // Store initial positions for absolute positioning (prevents jitter)
+    initialDragPosRef.current = {
+      tableX: table.x,
+      tableY: table.y,
+      mouseX: world.x,
+      mouseY: world.y,
+    };
+    
+    // Store offsets for multi-select
+    const selectedIds = currentMultiSelected.size > 0 ? currentMultiSelected : new Set([tableId]);
+    multiDragOffsetsRef.current.clear();
+    tables.forEach(t => {
+      if (selectedIds.has(t.id) || t.id === tableId) {
+        multiDragOffsetsRef.current.set(t.id, {
+          dx: t.x - table.x,
+          dy: t.y - table.y,
+        });
+      }
+    });
+
     setDragOffset({
       x: world.x - table.x,
       y: world.y - table.y,
@@ -641,28 +696,35 @@ const selectedTableRelationships = useMemo(() => {
     const worldPos = toWorld(e.clientX, e.clientY);
     updateCursor(worldPos.x, worldPos.y);
 
-  // TABLE DRAG - Check first (highest priority for user interaction)
-  if (isDragging && draggedTableId && !isPanning) {
+  // TABLE DRAG - Using absolute positioning for smooth movement
+  if (isDragging && draggedTableId && !isPanning && initialDragPosRef.current) {
     const world = toWorld(e.clientX, e.clientY);
-    const anchorTable = tables.find((t) => t.id === draggedTableId);
-    if (!anchorTable) return;
-
-    let newX = world.x - dragOffset.x;
-    let newY = world.y - dragOffset.y;
+    const { tableX, tableY, mouseX, mouseY } = initialDragPosRef.current;
+    
+    // Calculate delta from initial mouse position (absolute, not cumulative)
+    let newX = tableX + (world.x - mouseX);
+    let newY = tableY + (world.y - mouseY);
 
     if (isGridSnap) {
       newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
       newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
     }
 
-    const selectedIds = multiSelectedTableIds.size > 0 ? multiSelectedTableIds : new Set([draggedTableId]);
-    const dx = newX - anchorTable.x;
-    const dy = newY - anchorTable.y;
-
+    // Apply to all selected tables using their stored offsets
     setTables((prev) =>
       prev.map((t) => {
-        if (!selectedIds.has(t.id)) return t;
-        return { ...t, x: t.x + dx, y: t.y + dy };
+        const offset = multiDragOffsetsRef.current.get(t.id);
+        if (!offset && t.id !== draggedTableId) return t;
+        
+        if (t.id === draggedTableId) {
+          return { ...t, x: newX, y: newY };
+        }
+        
+        return { 
+          ...t, 
+          x: newX + offset!.dx, 
+          y: newY + offset!.dy,
+        };
       })
     );
     return;
@@ -1202,11 +1264,31 @@ const selectedTableRelationships = useMemo(() => {
         e.preventDefault();
         setIsGridSnap((prev) => !prev);
         push({ title: "Grid snapping", description: isGridSnap ? "Disabled" : "Enabled", type: "info" });
+      } else if (e.key === "=" || e.key === "+") {
+        // Zoom in with + or =
+        e.preventDefault();
+        zoomIn();
+      } else if (e.key === "-" || e.key === "_") {
+        // Zoom out with -
+        e.preventDefault();
+        zoomOut();
+      } else if (e.shiftKey && e.key.toLowerCase() === "p") {
+        // Toggle pan mode with Shift+P
+        e.preventDefault();
+        setPanMode((prev) => {
+          const newState = !prev;
+          push({ title: newState ? "Pan mode enabled" : "Pan mode disabled", description: "Right-click drag to pan", type: "info" });
+          return newState;
+        });
+      } else if (e.key === "0" && ctrlOrCmd) {
+        // Reset zoom with Ctrl+0
+        e.preventDefault();
+        resetViewport();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push]);
+  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push, zoomIn, zoomOut]);
 
   // --- SCHEMA TEMPLATES ---
   const templates: { name: string; apply: () => void }[] = [

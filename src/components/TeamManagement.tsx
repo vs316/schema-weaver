@@ -13,7 +13,7 @@ import {
   Shield,
   User,
   Eye,
-  ChevronDown,
+  Plus,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
@@ -30,6 +30,13 @@ interface TeamMember {
   display_name: string | null;
   email: string | null;
   role: TeamRole;
+}
+
+interface UserTeamMembership {
+  team_id: string;
+  team_name: string;
+  role: TeamRole;
+  is_primary: boolean;
 }
 
 interface TeamManagementProps {
@@ -56,6 +63,7 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
   const [team, setTeam] = useState<Team | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<TeamRole | null>(null);
+  const [userTeams, setUserTeams] = useState<UserTeamMembership[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -63,6 +71,8 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
 
   // Join team state
   const [inviteCode, setInviteCode] = useState('');
@@ -70,55 +80,89 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
   const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (teamId) {
-      fetchTeamData();
-    } else {
-      setLoading(false);
-    }
+    fetchAllData();
   }, [teamId]);
 
-  const fetchTeamData = async () => {
-    if (!teamId) return;
-
+  const fetchAllData = async () => {
     setLoading(true);
 
-    // Get current user
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
+    // Fetch all teams the user is a member of
+    const { data: memberships } = await supabase
+      .from('team_members')
+      .select('team_id, role')
+      .eq('user_id', user.id);
+
+    if (memberships && memberships.length > 0) {
+      const teamIds = memberships.map(m => m.team_id);
+      const { data: teamsData } = await supabase
+        .from('teams')
+        .select('id, name')
+        .in('id', teamIds);
+
+      if (teamsData) {
+        const userTeamsList: UserTeamMembership[] = teamsData.map(t => {
+          const membership = memberships.find(m => m.team_id === t.id);
+          return {
+            team_id: t.id,
+            team_name: t.name,
+            role: (membership?.role || 'member') as TeamRole,
+            is_primary: t.id === teamId,
+          };
+        });
+        setUserTeams(userTeamsList);
+      }
+    }
+
+    // If we have a specific teamId, fetch its details
+    if (teamId) {
+      await fetchTeamData(teamId, user.id);
+    }
+
+    setLoading(false);
+  };
+
+  const fetchTeamData = async (tid: string, userId: string) => {
     // Fetch team details
     const { data: teamData, error: teamError } = await supabase
       .from('teams')
       .select('*')
-      .eq('id', teamId)
+      .eq('id', tid)
       .single();
 
     if (teamError) {
       console.error('Failed to fetch team:', teamError);
-      setLoading(false);
       return;
     }
 
     setTeam(teamData);
     setNewName(teamData.name);
 
-    // Fetch team members with roles
+    // Fetch team members with roles from team_members table
     const { data: membersData, error: membersError } = await supabase
       .from('team_members')
       .select('id, user_id, role')
-      .eq('team_id', teamId);
+      .eq('team_id', tid);
 
-    if (!membersError && membersData) {
-      // Fetch profile info for each member
+    if (!membersError && membersData && membersData.length > 0) {
       const memberIds = membersData.map(m => m.user_id);
+      
+      // Fetch profile info for each member
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, display_name, email')
         .in('id', memberIds);
 
-      const enrichedMembers = membersData.map(m => {
+      const enrichedMembers: TeamMember[] = membersData.map(m => {
         const profile = profiles?.find(p => p.id === m.user_id);
         return {
-          ...m,
+          id: m.id,
+          user_id: m.user_id,
           display_name: profile?.display_name || null,
           email: profile?.email || null,
           role: m.role as TeamRole,
@@ -128,18 +172,16 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
       setMembers(enrichedMembers);
 
       // Set current user's role
-      if (user) {
-        const currentMember = enrichedMembers.find(m => m.user_id === user.id);
-        setCurrentUserRole(currentMember?.role || null);
-      }
+      const currentMember = enrichedMembers.find(m => m.user_id === userId);
+      setCurrentUserRole(currentMember?.role || null);
+    } else {
+      setMembers([]);
+      setCurrentUserRole(null);
     }
-
-    setLoading(false);
   };
 
   const copyInviteCode = async () => {
     if (!team?.invite_code) return;
-
     await navigator.clipboard.writeText(team.invite_code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -147,42 +189,33 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
 
   const regenerateInviteCode = async () => {
     setRegenerating(true);
-
     const { data, error } = await supabase.rpc('regenerate_team_invite_code');
-
     if (!error && data) {
       setTeam(prev => prev ? { ...prev, invite_code: data } : null);
     }
-
     setRegenerating(false);
   };
 
   const updateTeamName = async () => {
     if (!team || !newName.trim()) return;
-
     setSaving(true);
-
     const { error } = await supabase
       .from('teams')
       .update({ name: newName.trim() })
       .eq('id', team.id);
-
     if (!error) {
       setTeam(prev => prev ? { ...prev, name: newName.trim() } : null);
       setEditingName(false);
     }
-
     setSaving(false);
   };
 
   const updateMemberRole = async (memberUserId: string, newRole: TeamRole) => {
     setUpdatingRole(memberUserId);
-
     const { data, error } = await supabase.rpc('update_member_role', {
       p_member_user_id: memberUserId,
       p_new_role: newRole,
     });
-
     if (!error && data) {
       const result = data as { success: boolean; error?: string };
       if (result.success) {
@@ -191,7 +224,6 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
         ));
       }
     }
-
     setUpdatingRole(null);
   };
 
@@ -222,8 +254,48 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
       return;
     }
 
-    // Success - reload the page to reinitialize with new team
     onTeamJoined?.(result.team_id!);
+    window.location.reload();
+  };
+
+  const createNewTeam = async () => {
+    if (!newTeamName.trim()) return;
+    
+    setCreatingTeam(true);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setCreatingTeam(false);
+      return;
+    }
+
+    // Create new team
+    const { data: newTeam, error: teamError } = await supabase
+      .from('teams')
+      .insert({ name: newTeamName.trim() })
+      .select()
+      .single();
+
+    if (teamError || !newTeam) {
+      console.error('Failed to create team:', teamError);
+      setCreatingTeam(false);
+      return;
+    }
+
+    // Add user as owner
+    await supabase.from('team_members').insert({
+      team_id: newTeam.id,
+      user_id: user.id,
+      role: 'owner',
+    });
+
+    // Update profile with new team
+    await supabase
+      .from('profiles')
+      .update({ team_id: newTeam.id })
+      .eq('id', user.id);
+
+    setCreatingTeam(false);
     window.location.reload();
   };
 
@@ -250,17 +322,58 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
         <div className="text-center mb-6">
           <Users size={40} className="mx-auto mb-3" style={{ color: 'hsl(239 84% 67%)' }} />
           <h2 className="text-lg font-semibold" style={{ color: 'hsl(210 40% 98%)' }}>
-            Join a Team
+            Get Started
           </h2>
           <p className="text-sm mt-1" style={{ color: 'hsl(215 20% 65%)' }}>
-            Enter an invite code to collaborate with others
+            Create your own team or join an existing one
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Create Team Section */}
+          <div className="p-4 rounded-lg" style={{ background: 'hsl(222 47% 8%)' }}>
+            <h3 className="text-sm font-medium mb-3" style={{ color: 'hsl(210 40% 98%)' }}>
+              Create New Team
+            </h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+                placeholder="Team name"
+                className="flex-1 px-3 py-2 rounded-lg border text-sm"
+                style={{
+                  background: 'hsl(222 47% 4%)',
+                  borderColor: 'hsl(217 33% 17%)',
+                  color: 'hsl(210 40% 98%)',
+                }}
+              />
+              <button
+                onClick={createNewTeam}
+                disabled={creatingTeam || !newTeamName.trim()}
+                className="px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2"
+                style={{
+                  background: 'hsl(239 84% 67%)',
+                  color: 'hsl(0 0% 100%)',
+                  opacity: creatingTeam || !newTeamName.trim() ? 0.5 : 1,
+                }}
+              >
+                {creatingTeam ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                Create
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px" style={{ background: 'hsl(217 33% 17%)' }} />
+            <span className="text-xs" style={{ color: 'hsl(215 20% 65%)' }}>OR</span>
+            <div className="flex-1 h-px" style={{ background: 'hsl(217 33% 17%)' }} />
+          </div>
+
+          {/* Join Team Section */}
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: 'hsl(215 20% 65%)' }}>
-              Invite Code
+              Join with Invite Code
             </label>
             <input
               type="text"
@@ -277,34 +390,26 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
                 color: 'hsl(210 40% 98%)',
               }}
             />
-          </div>
 
-          {joinError && (
-            <p className="text-sm" style={{ color: 'hsl(0 84% 60%)' }}>
-              {joinError}
-            </p>
-          )}
-
-          <button
-            onClick={joinTeam}
-            disabled={joining}
-            className="w-full py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-            style={{
-              background: 'hsl(239 84% 67%)',
-              color: 'hsl(0 0% 100%)',
-              opacity: joining ? 0.7 : 1,
-            }}
-          >
-            {joining ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <UserPlus size={18} />
+            {joinError && (
+              <p className="text-sm mt-2" style={{ color: 'hsl(0 84% 60%)' }}>
+                {joinError}
+              </p>
             )}
-            {joining ? 'Joining...' : 'Join Team'}
-          </button>
 
-          <div className="text-center text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
-            Or continue without joining to create your own team
+            <button
+              onClick={joinTeam}
+              disabled={joining}
+              className="w-full mt-3 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+              style={{
+                background: 'hsl(142 76% 36%)',
+                color: 'hsl(0 0% 100%)',
+                opacity: joining ? 0.7 : 1,
+              }}
+            >
+              {joining ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+              {joining ? 'Joining...' : 'Join Team'}
+            </button>
           </div>
         </div>
       </div>
@@ -397,20 +502,37 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
         </div>
 
         {onClose && (
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5"
-          >
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/5">
             <X size={18} style={{ color: 'hsl(215 20% 65%)' }} />
           </button>
         )}
       </div>
 
+      {/* Teams you belong to */}
+      {userTeams.length > 1 && (
+        <div className="mb-4 p-3 rounded-lg" style={{ background: 'hsl(222 47% 8%)' }}>
+          <p className="text-xs font-medium mb-2" style={{ color: 'hsl(215 20% 65%)' }}>
+            Your Teams ({userTeams.length})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {userTeams.map(ut => (
+              <span
+                key={ut.team_id}
+                className="px-2 py-1 rounded text-xs"
+                style={{
+                  background: ut.is_primary ? 'hsl(239 84% 67% / 0.2)' : 'hsl(217 33% 17%)',
+                  color: ut.is_primary ? 'hsl(239 84% 67%)' : 'hsl(215 20% 65%)',
+                }}
+              >
+                {ut.team_name} ({ROLE_LABELS[ut.role]})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Invite Code Section */}
-      <div
-        className="p-4 rounded-lg mb-4"
-        style={{ background: 'hsl(222 47% 8%)' }}
-      >
+      <div className="p-4 rounded-lg mb-4" style={{ background: 'hsl(222 47% 8%)' }}>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium" style={{ color: 'hsl(215 20% 65%)' }}>
             Invite Code
@@ -465,121 +587,67 @@ export function TeamManagement({ teamId, onTeamJoined, onClose }: TeamManagement
         <h3 className="text-sm font-medium mb-3" style={{ color: 'hsl(215 20% 65%)' }}>
           Team Members
         </h3>
-        <div className="space-y-2">
-          {members.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center gap-3 p-3 rounded-lg"
-              style={{ background: 'hsl(222 47% 8%)' }}
-            >
+        {members.length === 0 ? (
+          <p className="text-sm py-4 text-center" style={{ color: 'hsl(215 20% 50%)' }}>
+            No team members found. Share your invite code to add members.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {members.map((member) => (
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{
-                  background: `hsl(${Math.abs(member.user_id.charCodeAt(0) * 7) % 360} 70% 50%)`,
-                  color: 'white',
-                }}
+                key={member.id}
+                className="flex items-center gap-3 p-3 rounded-lg"
+                style={{ background: 'hsl(222 47% 8%)' }}
               >
-                {(member.display_name || member.email || '?')[0].toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate" style={{ color: 'hsl(210 40% 98%)' }}>
-                  {member.display_name || 'Anonymous'}
-                </p>
-                {member.email && (
-                  <p className="text-xs truncate" style={{ color: 'hsl(215 20% 65%)' }}>
-                    {member.email}
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                  style={{
+                    background: `hsl(${Math.abs(member.user_id.charCodeAt(0) * 7) % 360} 70% 50%)`,
+                    color: 'white',
+                  }}
+                >
+                  {(member.display_name || member.email || '?')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: 'hsl(210 40% 98%)' }}>
+                    {member.display_name || 'Anonymous'}
                   </p>
-                )}
-              </div>
+                  {member.email && (
+                    <p className="text-xs truncate" style={{ color: 'hsl(215 20% 65%)' }}>
+                      {member.email}
+                    </p>
+                  )}
+                </div>
 
-              {/* Role badge/selector */}
-              <div className="flex items-center gap-1">
-                {ROLE_ICONS[member.role]}
-                {canManageMembers && member.role !== 'owner' ? (
-                  <div className="relative">
+                {/* Role badge/selector */}
+                <div className="flex items-center gap-1">
+                  {ROLE_ICONS[member.role]}
+                  {canManageMembers && member.role !== 'owner' ? (
                     <select
                       value={member.role}
                       onChange={(e) => updateMemberRole(member.user_id, e.target.value as TeamRole)}
                       disabled={updatingRole === member.user_id}
-                      className="appearance-none px-2 py-1 pr-6 rounded text-xs font-medium cursor-pointer"
+                      className="text-xs px-1.5 py-0.5 rounded border bg-transparent cursor-pointer"
                       style={{
-                        background: 'hsl(222 47% 6%)',
+                        borderColor: 'hsl(217 33% 17%)',
                         color: 'hsl(210 40% 98%)',
-                        border: '1px solid hsl(217 33% 17%)',
                       }}
                     >
                       <option value="admin">Admin</option>
                       <option value="member">Member</option>
                       <option value="viewer">Viewer</option>
                     </select>
-                    <ChevronDown
-                      size={12}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                      style={{ color: 'hsl(215 20% 65%)' }}
-                    />
-                  </div>
-                ) : (
-                  <span
-                    className="text-xs font-medium px-2 py-1 rounded"
-                    style={{
-                      background: 'hsl(222 47% 6%)',
-                      color: 'hsl(210 40% 98%)',
-                    }}
-                  >
-                    {ROLE_LABELS[member.role]}
-                  </span>
-                )}
+                  ) : (
+                    <span className="text-xs" style={{ color: 'hsl(215 20% 65%)' }}>
+                      {ROLE_LABELS[member.role]}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
-  );
-}
-
-// Compact version for header/sidebar
-interface TeamBadgeProps {
-  teamId: string | null;
-  onClick?: () => void;
-}
-
-export function TeamBadge({ teamId, onClick }: TeamBadgeProps) {
-  const [team, setTeam] = useState<{ name: string; member_count: number } | null>(null);
-
-  useEffect(() => {
-    if (!teamId) return;
-
-    const fetchTeam = async () => {
-      const { data } = await supabase
-        .from('teams')
-        .select('name')
-        .eq('id', teamId)
-        .single();
-
-      if (data) {
-        setTeam({ name: data.name, member_count: 1 });
-      }
-    };
-
-    fetchTeam();
-  }, [teamId]);
-
-  if (!team) return null;
-
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors hover:bg-white/5"
-      style={{
-        background: 'hsl(222 47% 8%)',
-        border: '1px solid hsl(217 33% 17%)',
-      }}
-    >
-      <Users size={14} style={{ color: 'hsl(239 84% 67%)' }} />
-      <span className="truncate max-w-[120px]" style={{ color: 'hsl(210 40% 98%)' }}>
-        {team.name}
-      </span>
-    </button>
   );
 }
