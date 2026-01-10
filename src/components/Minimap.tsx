@@ -57,8 +57,8 @@ export function Minimap({
     const viewportHeight = window.innerHeight / viewport.zoom;
 
     return {
-      x: (viewport.x / viewport.zoom - bounds.minX) * scale,
-      y: (viewport.y / viewport.zoom - bounds.minY) * scale,
+      x: ((viewport.x / viewport.zoom) - bounds.minX + bounds.padding) * scale,
+      y: ((viewport.y / viewport.zoom) - bounds.minY + bounds.padding) * scale,
       width: viewportWidth * scale,
       height: viewportHeight * scale,
     };
@@ -67,8 +67,8 @@ export function Minimap({
   const handleMinimapClick = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale + bounds.minX;
-    const y = (e.clientY - rect.top) / scale + bounds.minY;
+    const x = (e.clientX - rect.left) / scale + bounds.minX - bounds.padding;
+    const y = (e.clientY - rect.top) / scale + bounds.minY - bounds.padding;
 
     onViewportChange(
       x - window.innerWidth / (2 * viewport.zoom),
