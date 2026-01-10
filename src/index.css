@@ -202,6 +202,94 @@
   50% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
 }
 
+/* ====== FEATURE 1: TABLE SELECTION ANIMATIONS ====== */
+@keyframes table-select {
+  0% { 
+    opacity: 0.9;
+    transform: scale(0.98);
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes table-deselect {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.7;
+    transform: scale(0.99);
+  }
+}
+
+@keyframes border-pulse {
+  0%, 100% { 
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.8));
+  }
+}
+
+.animate-table-select {
+  animation: table-select 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-table-deselect {
+  animation: table-deselect 0.2s ease-out forwards;
+}
+
+.animate-border-pulse {
+  animation: border-pulse 1.5s ease-in-out infinite;
+}
+
+/* ====== FEATURE 3: HOVER GLOW EFFECTS ====== */
+@keyframes glow-in {
+  0% {
+    filter: drop-shadow(0 0 0px rgba(99, 102, 241, 0));
+  }
+  100% {
+    filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.6)) 
+            drop-shadow(0 0 24px rgba(99, 102, 241, 0.3));
+  }
+}
+
+@keyframes glow-out {
+  0% {
+    filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.6))
+            drop-shadow(0 0 24px rgba(99, 102, 241, 0.3));
+  }
+  100% {
+    filter: drop-shadow(0 0 0px rgba(99, 102, 241, 0));
+  }
+}
+
+.hover-glow {
+  transition: filter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.hover-glow:hover {
+  filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.6))
+          drop-shadow(0 0 24px rgba(99, 102, 241, 0.3));
+}
+
+.edge-glow {
+  transition: filter 0.2s ease-out;
+}
+
+.edge-glow:hover {
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5));
+}
+
+/* ====== UTILITY ANIMATION CLASSES ====== */
 .animate-fade-in {
   animation: fade-in 0.3s ease-out forwards;
 }
