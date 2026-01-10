@@ -33,6 +33,7 @@ import {
   Unlock,         // ADD THIS
   MessageSquare,  // ADD THIS for comments
   Zap,           // ADD THIS for sample data
+  Pencil,         // ADD THIS for rename
 } from "lucide-react";
 
 // Add these utility imports:
@@ -43,6 +44,7 @@ import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
 import { usePresence } from "./hooks/usePresence";
 import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
+import { Minimap } from "./components/Minimap";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
@@ -139,7 +141,7 @@ function ERDBuilder({
 }: { 
   user: AppUser;
   diagram: ERDDiagram | null;
-  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => void;
+  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean; is_locked?: boolean }) => void;
   onBack: () => void;
   syncing: boolean;
   onLogout: () => void;
@@ -188,6 +190,8 @@ function ERDBuilder({
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [connectTableSearch, setConnectTableSearch] = useState<string>("");
   const [showCommandTips, setShowCommandTips] = useState(false);
+  const [isRenamingDiagram, setIsRenamingDiagram] = useState(false);
+  const [renameValue, setRenameValue] = useState(diagram?.name || "");
 
   // --- PRESENCE (Real-time collaboration) ---
   const { users: presenceUsers, isConnected: presenceConnected, updateCursor } = usePresence(
@@ -368,6 +372,7 @@ const [sampleData, setSampleData] = useState<any[]>([]);
         setViewport(loadedViewport);
         setIsDarkMode(diagram.is_dark_mode ?? true);
         setIsLocked(diagram.is_locked ?? false);
+        setRenameValue(diagram.name || "");
         setLastSaved("Loaded from cloud");
       } catch (e) {
         console.error("Failed to load data from cloud", e);
@@ -464,6 +469,7 @@ const [sampleData, setSampleData] = useState<any[]>([]);
         relations: relations as Json,
         viewport: viewport as Json,
         is_dark_mode: isDarkMode,
+        is_locked: isLocked,
       });
       
       setLastSaved(now);
@@ -477,7 +483,7 @@ const [sampleData, setSampleData] = useState<any[]>([]);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tables, relations, isDarkMode, viewport]);
+  }, [tables, relations, isDarkMode, viewport, isLocked]);
 
   // Push history on non-drag meaningful changes
   useEffect(() => {
@@ -1229,21 +1235,24 @@ const selectedTableRelationships = useMemo(() => {
       } else if (ctrlOrCmd && e.key.toLowerCase() === "d") {
         e.preventDefault();
         if (selectedTableId) duplicateTable(selectedTableId);
-      }else if (ctrlOrCmd && e.key.toLowerCase() === "l") {
-  e.preventDefault();
-  const newLockState = !isLocked;
-  setIsLocked(newLockState);
-  onSave({ is_locked: newLockState } as any);
-
-  push({ 
-    title: `Diagram ${newLockState ? "locked" : "unlocked"}`, 
-    type: "info" 
-  });
-} else if (e.key === "Delete" || e.key === "Backspace") {
-   if (isLocked) {
-    push({ title: "Diagram is locked", type: "info" });
-    return;
-  }
+      } else if (ctrlOrCmd && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        const newLockState = !isLocked;
+        setIsLocked(newLockState);
+        onSave({ is_locked: newLockState } as any);
+        push({ 
+          title: `Diagram ${newLockState ? "locked" : "unlocked"}`, 
+          type: "info" 
+        });
+      } else if (ctrlOrCmd && e.key === "/") {
+        e.preventDefault();
+        setShowCommandTips(!showCommandTips);
+        push({ title: "Keyboard shortcuts", description: showCommandTips ? "Closed" : "Opened", type: "info" });
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        if (isLocked) {
+          push({ title: "Diagram is locked", type: "info" });
+          return;
+        }
         // Delete selected table/edge
         if (selectedTableId) {
           const tId = selectedTableId;
@@ -1288,7 +1297,7 @@ const selectedTableRelationships = useMemo(() => {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push, zoomIn, zoomOut]);
+  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, isLocked, showCommandTips, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push, zoomIn, zoomOut]);
 
   // --- SCHEMA TEMPLATES ---
   const templates: { name: string; apply: () => void }[] = [
@@ -1592,6 +1601,16 @@ const selectedTableRelationships = useMemo(() => {
             backgroundPosition: `${viewport.x}px ${viewport.y}px`,
           }}
         >
+          {/* Minimap - Render when 4+ tables */}
+          {tables.length >= 4 && (
+            <Minimap
+              tables={tables}
+              viewport={viewport}
+              isDarkMode={isDarkMode}
+              onViewportChange={(x, y, z) => setViewport({ x, y, zoom: z })}
+            />
+          )}
+
           {/* Live cursors from other users */}
           {presenceUsers.map((pUser) => (
             <LiveCursor key={pUser.id} user={pUser} viewport={viewport} />
@@ -1821,6 +1840,7 @@ const selectedTableRelationships = useMemo(() => {
                   {/* <div>Ctrl/Cmd+S: export JSON, Ctrl/Cmd+P: export PNG</div> */}
                   <div>Ctrl/Cmd+D: duplicate table</div>
                   <div>Ctrl/Cmd+G: toggle grid snapping</div>
+                  <div>Ctrl/Cmd+/: keyboard shortcuts</div>
                   <div>Delete: remove selection</div>
                 </div>
               </div>
@@ -1878,6 +1898,69 @@ const selectedTableRelationships = useMemo(() => {
                 const t = tables.find((x) => x.id === selectedTableId)!;
                 return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+        {/* Diagram Rename - Feature 6 */}
+        <div className="space-y-2 p-3 rounded-lg border" style={{
+          borderColor: isDarkMode ? "rgba(148, 163, 184, 0.1)" : "rgba(203, 213, 225, 0.3)",
+          background: isDarkMode ? "rgba(15, 23, 42, 0.5)" : "rgba(248, 250, 252, 0.5)"
+        }}>
+          <div className="flex items-center justify-between">
+            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              Diagram Name
+            </label>
+            {!isRenamingDiagram && (
+              <button
+                onClick={() => setIsRenamingDiagram(true)}
+                className={`p-1 rounded transition-colors ${isDarkMode ? "hover:bg-slate-700" : "hover:bg-slate-200"}`}
+                title="Rename diagram"
+              >
+                <Pencil size={12} className="text-indigo-500" />
+              </button>
+            )}
+          </div>
+          {isRenamingDiagram ? (
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                className={`flex-1 rounded px-2 py-1.5 text-xs border focus:ring-2 focus:ring-indigo-500 outline-none ${
+                  isDarkMode
+                    ? "bg-slate-950 border-slate-700 text-slate-100"
+                    : "bg-white border-slate-300 text-slate-900"
+                }`}
+              />
+              <button
+                onClick={() => {
+                  if (diagram?.id) {
+                    onSave({ ...diagram, name: renameValue } as any);
+                  }
+                  setIsRenamingDiagram(false);
+                  push({ title: "Diagram renamed", type: "success" });
+                }}
+                className="p-1.5 rounded bg-indigo-500 text-white hover:bg-indigo-600 transition-colors"
+                title="Confirm"
+              >
+                <CheckCircle2 size={14} />
+              </button>
+              <button
+                onClick={() => {
+                  setRenameValue(diagram?.name || "");
+                  setIsRenamingDiagram(false);
+                }}
+                className={`p-1.5 rounded transition-colors ${isDarkMode ? "bg-slate-700 hover:bg-slate-600" : "bg-slate-200 hover:bg-slate-300"}`}
+                title="Cancel"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className={`text-xs font-mono px-2 py-1.5 rounded ${isDarkMode ? "bg-slate-950/50" : "bg-white/50"}`}>
+              {diagram?.name || "Untitled Diagram"}
+            </div>
+          )}
+        </div>
+
         {/* Table Name */}
         <div className="space-y-2">
           <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
@@ -2023,48 +2106,11 @@ const selectedTableRelationships = useMemo(() => {
                   <X size={14} />
                 </button>
               </div>
-
-              <div className="flex gap-3">
-                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={col.isPk}
-                    onChange={(e) =>
-                      !isLocked && setTables((prev) =>
-                        prev.map((x) =>
-                          x.id === t.id
-                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
-                            : x
-                        )
-                      )
-                    }
-                    disabled={isLocked}
-                    onMouseUp={() => pushHistory()}
-                  />{" "}
-                  PK
-                </label>
-
-                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={col.isFk}
-                    onChange={(e) =>
-                      !isLocked && setTables((prev) =>
-                        prev.map((x) =>
-                          x.id === t.id
-                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: e.target.checked } : c)) }
-                            : x
-                        )
-                      )
-                    }
-                    disabled={isLocked}
-                    onMouseUp={() => pushHistory()}
-                  />{" "}
-                  FK
-                </label>
-
+              <div className="flex gap-2 text-[10px]">
                 <select
-                  className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`flex-1 rounded px-2 py-1 border outline-none transition-colors duration-200 ${
+                    isDarkMode ? "bg-slate-900 border-slate-600 text-slate-100" : "bg-white border-slate-300 text-slate-900"
+                  } ${isLocked ? "cursor-not-allowed opacity-50" : ""}`}
                   value={col.type}
                   onChange={(e) =>
                     !isLocked && setTables((prev) =>
@@ -2075,601 +2121,169 @@ const selectedTableRelationships = useMemo(() => {
                       )
                     )
                   }
+                  onBlur={() => pushHistory()}
                   disabled={isLocked}
-                  onMouseUp={() => pushHistory()}
                 >
                   <option>INT</option>
-                  <option>UUID</option>
                   <option>VARCHAR</option>
                   <option>TEXT</option>
+                  <option>FLOAT</option>
                   <option>BOOL</option>
+                  <option>DATE</option>
+                  <option>TIMESTAMP</option>
+                  <option>UUID</option>
+                  <option>JSON</option>
                 </select>
+                <button
+                  className={`px-2 py-1 rounded transition-all ${
+                    col.isPk
+                      ? "bg-amber-500 text-white"
+                      : isDarkMode
+                      ? "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  } ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    if (!isLocked) {
+                      setTables((prev) =>
+                        prev.map((x) =>
+                          x.id === t.id
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: !c.isPk } : c)) }
+                            : x
+                        )
+                      );
+                    }
+                  }}
+                  onMouseUp={() => pushHistory()}
+                  disabled={isLocked}
+                  title="Primary Key"
+                >
+                  <Key size={12} />
+                </button>
+                <button
+                  className={`px-2 py-1 rounded transition-all ${
+                    col.isFk
+                      ? "bg-indigo-500 text-white"
+                      : isDarkMode
+                      ? "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  } ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    if (!isLocked) {
+                      setTables((prev) =>
+                        prev.map((x) =>
+                          x.id === t.id
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: !c.isFk } : c)) }
+                            : x
+                        )
+                      );
+                    }
+                  }}
+                  onMouseUp={() => pushHistory()}
+                  disabled={isLocked}
+                  title="Foreign Key"
+                >
+                  <LinkIcon size={12} />
+                </button>
               </div>
             </div>
           ))}
         </div>
-
-        {/* Feature 2: Relationships Section */}
-        {selectedTableRelationships.length > 0 && (
-          <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-            <label className={`text-[10px] font-bold uppercase block mb-2 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-              {selectedTableRelationships.length} Relationship{selectedTableRelationships.length !== 1 ? "s" : ""}
-            </label>
-            <div className="space-y-2 mb-4">
-              {selectedTableRelationships.map((r) => {
-                const isSource = r.sourceTableId === selectedTableId;
-                const targetId = isSource ? r.targetTableId : r.sourceTableId;
-                const targetTable = tables.find(t => t.id === targetId);
-                
-                return (
-                  <div
-                    key={r.id}
-                    onClick={() => setSelectedEdgeId(r.id)}
-                    className={`p-2 rounded-lg text-xs cursor-pointer border transition-all ${
-                      selectedEdgeId === r.id
-                        ? "bg-indigo-500/20 border-indigo-500 text-indigo-300"
-                        : isDarkMode 
-                          ? "border-indigo-700/50 text-indigo-300 hover:bg-indigo-900/30 hover:border-indigo-600"
-                          : "border-indigo-300/50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400"
-                    }`}
-                  >
-                    <div className="font-bold flex items-center gap-1">
-                      {isSource ? "→" : "←"} {targetTable?.name || "Unknown"}
-                    </div>
-                    {r.label && <div className="text-[9px] opacity-75 mt-1">FK: {r.label}</div>}
-                    <div className="text-[8px] opacity-50 mt-1">
-                      {r.lineType === "curved" ? "Curved" : "Straight"} {r.isDashed ? "• Dashed" : ""}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Connect to table */}
-        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-          <label className={`text-[10px] font-bold uppercase block mb-3 transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Connect to table
-          </label>
-          <input
-            type="text"
-            placeholder="Search tables..."
-            value={connectTableSearch}
-            onChange={(e) => setConnectTableSearch(e.target.value)}
-            className={`w-full px-3 py-2 rounded-lg text-xs mb-3 border outline-none transition-all duration-200 ${
-              isDarkMode
-                ? "bg-slate-900 border-slate-700 text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-            disabled={isLocked}
-          />
-          <div className="grid grid-cols-1 gap-2">
-            {tables
-              .filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase()))
-              .map((target) => {
-                const isLinked = relations.some(
-                  (r) =>
-                    (r.sourceTableId === t.id && r.targetTableId === target.id) ||
-                    (r.sourceTableId === target.id && r.targetTableId === t.id)
-                );
-                return (
-                  <button
-                    key={target.id}
-                    onClick={() => !isLocked && toggleRelation(t.id, target.id)}
-                    disabled={isLocked}
-                    className={`text-left px-3 py-2 rounded-lg text-xs border transition-all duration-200 ${
-                      isLocked ? "opacity-50 cursor-not-allowed" : ""
-                    } ${
-                      isLinked
-                        ? isDarkMode
-                          ? "bg-indigo-900/40 border-indigo-600 text-indigo-200 hover:bg-indigo-900/60"
-                          : "bg-indigo-100 border-indigo-400 text-indigo-900 hover:bg-indigo-200"
-                        : isDarkMode
-                        ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600"
-                        : "border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400"
-                    }`}
-                  >
-                    {isLinked ? "✓ " : ""}Link to {target.name}
-                  </button>
-                );
-              })}
-            {tables.filter((x) => x.id !== t.id && x.name.toLowerCase().includes(connectTableSearch.toLowerCase())).length === 0 && (
-              <div className={`text-xs py-3 text-center transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                {connectTableSearch.length > 0 ? "No tables found" : "No other tables available"}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Feature 4: Comments Section */}
-        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-          <div className="flex items-center justify-between mb-3">
-            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-              <MessageSquare size={12} />
-              Comments {selectedTableComments.length > 0 && `(${selectedTableComments.length})`}
-            </label>
-          </div>
-
-          {/* Add comment form */}
-          {!isLocked && (
-            <div className="mb-4 space-y-2">
-              <textarea
-                className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
-                  isDarkMode
-                    ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                }`}
-                rows={2}
-                placeholder="Add a comment..."
-                value={newCommentText}
-                onChange={(e) => setNewCommentText(e.target.value)}
-              />
-              <button
-                onClick={() => {
-                  if (newCommentText.trim()) {
-                    handleAddComment(newCommentText);
-                    setNewCommentText("");
-                    push({ title: "Comment added", type: "success" });
-                  }
-                }}
-                disabled={!newCommentText.trim()}
-                className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-              >
-                Post Comment
-              </button>
-            </div>
-          )}
-
-          {/* Comments list */}
-          {selectedTableComments.length === 0 ? (
-            <div className={`text-xs text-center py-4 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-              No comments yet
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {selectedTableComments.map((comment: TableComment) => (
-                <div
-                  key={comment.id}
-                  className={`p-2.5 rounded-lg border transition-all duration-200 ${
-                    isDarkMode ? "bg-slate-950/50 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
-                        {comment.author_email?.split('@')[0] || 'User'}
-                      </div>
-                      <div className={`text-xs my-1.5 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                        {comment.content}
-                      </div>
-                      <div className={`text-[8px] ${isDarkMode ? "text-slate-600" : "text-slate-500"}`}>
-                        {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString()}
-                      </div>
-                    </div>
-                    {comment.author_id === user.id && !isLocked && (
-                      <button
-                        onClick={() => handleDeleteComment(comment.id)}
-                        className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
-                        title="Delete comment"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Feature 5: Sample Data */}
-        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-          <button
-            onClick={() => {
-              if (!sampleDataShown) {
-                const data = generateSampleData(t.columns, 5);
-                setSampleData(data);
-                setSampleDataShown(true);
-              } else {
-                setSampleDataShown(false);
-              }
-            }}
-            className={`w-full px-3 py-2 rounded-lg text-xs font-bold border transition-all duration-200 flex items-center justify-center gap-2 ${
-              sampleDataShown
-                ? "bg-emerald-500/10 border-emerald-500 text-emerald-500"
-                : isDarkMode 
-                  ? "border-slate-700 text-slate-400 hover:bg-slate-800"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <Zap size={12} />
-            {sampleDataShown ? "Hide" : "Show"} Sample Data
-          </button>
-
-          {sampleDataShown && sampleData.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {/* Sample data mini table */}
-              <div className={`overflow-x-auto rounded-lg border transition-all duration-200 ${
-                isDarkMode ? "border-slate-800 bg-slate-950/30" : "border-slate-200 bg-slate-50"
-              }`}>
-                <table className="w-full text-[9px]">
-                  <thead>
-                    <tr className={`border-b transition-colors duration-200 ${isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-slate-100"}`}>
-                      {t.columns.map((col) => (
-                        <th key={col.id} className={`px-2 py-1.5 text-left font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                          <div className="truncate">{col.name}</div>
-                          <div className={`text-[8px] font-normal opacity-60 mt-0.5 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
-                            {col.type}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sampleData.slice(0, 3).map((row, idx) => (
-                      <tr key={idx} className={`border-b transition-colors duration-200 hover:bg-opacity-50 ${isDarkMode ? "border-slate-800 hover:bg-slate-900/20" : "border-slate-100 hover:bg-slate-100"}`}>
-                        {t.columns.map((col) => (
-                          <td key={col.id} className={`px-2 py-1 ${isDarkMode ? "text-slate-400" : "text-slate-600"} truncate max-w-xs`}>
-                            {String(row[col.name])}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Quick copy buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const json = sampleDataToJSON(t.name, t.columns, sampleData);
-                    navigator.clipboard.writeText(json);
-                    push({ title: "JSON copied to clipboard", type: "success" });
-                  }}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 ${
-                    isDarkMode ? "border-slate-700 text-slate-400 hover:bg-slate-800" : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  Copy JSON
-                </button>
-                <button
-                  onClick={() => {
-                    const sql = sampleDataToSQLInsert(t.name, t.columns, sampleData);
-                    navigator.clipboard.writeText(sql);
-                    push({ title: "SQL INSERT copied", type: "success" });
-                  }}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 ${
-                    isDarkMode ? "border-slate-700 text-slate-400 hover:bg-slate-800" : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  Copy SQL
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Delete buttons */}
-        <div className="flex items-center gap-2 pt-4 border-t transition-colors duration-300" style={{borderColor: isDarkMode ? "#1e293b" : "#e2e8f0"}}>
-          <button
-            onClick={() => duplicateTable(t.id)}
-            disabled={isLocked}
-            className={`flex-1 py-2 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200`}
-          >
-            Duplicate table
-          </button>
-          <button
-            onClick={() => {
-              if (!isLocked) {
-                setTables(tables.filter((x) => x.id !== t.id));
-                setRelations(relations.filter((r) => r.sourceTableId !== t.id && r.targetTableId !== t.id));
-                setSelectedTableId(null);
-                setMultiSelectedTableIds(new Set());
-                pushHistory();
-                push({ title: "Table deleted", type: "info" });
-              }
-            }}
-            disabled={isLocked}
-            className="flex-1 py-2 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg hover:bg-red-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            Delete table
-          </button>
-        </div>
       </div>
-    );
-  })()
-) : selectedEdgeId ? (
-              (() => {
-                const r = relations.find((x) => x.id === selectedEdgeId)!;
-                return (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="space-y-2">
-                      <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>Edge label</label>
-                      <input
-                        className={`w-full rounded-lg px-3 py-2 text-sm outline-none border focus:ring-2 focus:ring-indigo-500 transition-all duration-200 ${
-                          isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100 focus:bg-slate-900 focus:border-indigo-500" : "bg-white border-slate-300 text-slate-900 focus:bg-slate-50 focus:border-indigo-400"
-                        }`}
-                        placeholder="e.g. user_id"
-                        value={r.label || ""}
-                        onChange={(e) => setRelations((prev) => prev.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))}
-                        onBlur={() => pushHistory()}
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className={`text-[10px] font-bold uppercase block transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>Line style</label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setRelations((prev) => prev.map((x) => (x.id === r.id ? { ...x, isDashed: !x.isDashed } : x)))}
-                          className={`flex-1 py-2 rounded-lg text-xs border transition-all ${
-                            r.isDashed ? "bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20" : isDarkMode ? "border-slate-700 text-slate-400" : "border-slate-200"
-                          }`}
-                          onMouseUp={() => pushHistory()}
-                        >
-                          Dotted
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            setRelations((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, lineType: x.lineType === "curved" ? "straight" : "curved" } : x))
-                            )
-                          }
-                          className={`flex-1 py-2 rounded-lg text-xs border transition-all duration-200 ${
-                            r.lineType === "straight"
-                              ? "bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20"
-                              : isDarkMode
-                              ? "border-slate-700 text-slate-400 hover:bg-slate-800"
-                              : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                          }`}
-                          onMouseUp={() => pushHistory()}
-                        >
-                          Straight
-                        </button>
-                      </div>
-
-                      <div className={`text-[11px] leading-relaxed transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
-                        Tip: Click an edge to select it, then drag the small handle to bend/route it.
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setRelations(relations.filter((x) => x.id !== r.id));
-                        setSelectedEdgeId(null);
-                        pushHistory();
-                        push({ title: "Connection removed", type: "info" });
-                      }}
-                      className="w-full py-2 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg hover:bg-red-600 hover:text-white transition-all duration-200"
-                    >
-                      Remove connection
-                    </button>
-                  </div>
                 );
               })()
             ) : (
-              <div className={`space-y-5`}>
-                <div className={`h-full flex flex-col items-center justify-center text-center select-none transition-colors duration-300 ${isDarkMode ? "text-slate-700" : "text-slate-400"}`}>
-                  <MousePointer2 size={40} className="mb-4" />
-                  <p className="text-xs font-bold uppercase tracking-widest">
-                    Select an element
-                    <br />
-                    to edit settings
-                  </p>
-                </div>
-
-                <div className={`space-y-2`}>
-                  <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>Quick templates</label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {templates.map((tpl) => (
-                      <button
-                        key={tpl.name}
-                        onClick={tpl.apply}
-                        className={`text-left px-3 py-2 rounded-lg text-xs border transition-all duration-200 ${
-                          isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600" : "border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400"
-                        }`}
-                      >
-                        {tpl.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div className={`flex items-center justify-center h-full text-center text-xs opacity-60 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                Select a table to edit
               </div>
             )}
-          </div>
-
-          <div className={`p-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={clearAllSelections}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all duration-200 ${
-                  isDarkMode ? "border-slate-700 hover:bg-slate-800 hover:border-slate-600 text-slate-300" : "border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700"
-                }`}
-              >
-                Clear selection
-              </button>
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                className={`p-2 rounded-lg text-xs font-bold border transition-all duration-200 ${
-                  isDarkMode ? "border-slate-700 hover:bg-slate-800 text-slate-300" : "border-slate-300 hover:bg-slate-100 text-slate-700"
-                }`}
-                title="Collapse"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Toasts */}
-      <div className="pointer-events-none fixed bottom-4 right-4 flex flex-col gap-2 z-[60]">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`pointer-events-auto px-4 py-2 rounded-lg shadow-lg backdrop-blur-md border text-sm transition-all ${
-              t.type === "success"
-                ? isDarkMode
-                  ? "bg-emerald-900/50 border-emerald-700 text-emerald-200"
-                  : "bg-emerald-100 border-emerald-300 text-emerald-800"
-                : t.type === "error"
-                ? isDarkMode
-                  ? "bg-rose-900/50 border-rose-700 text-rose-200"
-                  : "bg-rose-100 border-rose-300 text-rose-800"
-                : isDarkMode
-                ? "bg-slate-900/60 border-slate-700 text-slate-200"
-                : "bg-white/70 border-slate-300 text-slate-800"
-            }`}
-          >
-            <div className="font-semibold">{t.title}</div>
-            {t.description && <div className="text-xs opacity-80">{t.description}</div>}
-          </div>
-        ))}
+      {/* TOAST CONTAINER */}
+      <div className="pointer-events-none fixed top-0 right-0 p-4 z-50 space-y-2 flex flex-col">
+        {toasts.map((t) => {
+          const bgClass = 
+            t.type === "success" ? (isDarkMode ? "bg-emerald-500/20 border-emerald-500" : "bg-emerald-50 border-emerald-300") :
+            t.type === "error" ? (isDarkMode ? "bg-red-500/20 border-red-500" : "bg-red-50 border-red-300") :
+            isDarkMode ? "bg-slate-800 border-slate-700" : "bg-slate-50 border-slate-300";
+          
+          const textClass = 
+            t.type === "success" ? (isDarkMode ? "text-emerald-200" : "text-emerald-900") :
+            t.type === "error" ? (isDarkMode ? "text-red-200" : "text-red-900") :
+            isDarkMode ? "text-slate-200" : "text-slate-900";
+          
+          return (
+            <div
+              key={t.id}
+              className={`pointer-events-auto px-4 py-3 rounded-lg border backdrop-blur-md animate-slide-in-up ${bgClass}`}
+            >
+              <div className={`text-sm font-semibold ${textClass}`}>{t.title}</div>
+              {t.description && <div className={`text-xs opacity-75 ${textClass}`}>{t.description}</div>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-export default function App() {
+// ============================================================
+// MAIN APP WRAPPER
+// ============================================================
+export function App() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, isAuthenticated, signOut } = useAuth();
-  const [selectedDiagram, setSelectedDiagram] = useState<ERDDiagram | null>(null);
-  const [showSelector, setShowSelector] = useState(true);
-  
-  // Use Supabase user id for cloud sync
-  const userId = user?.id;
-  const {
-    diagrams,
-    loading: cloudLoading,
-    syncing,
-    teamId,
-    createDiagram,
-    saveDiagram,
-    deleteDiagram,
-    loadDiagram,
-    profileExists,
-    error: cloudError,
-  } = useCloudSync(userId);
-  const [bootstrapped, setBootstrapped] = useState(false);
-  // useEffect(() => {
-  //   if (!authLoading && !isAuthenticated) {
-  //     navigate('/auth');
-  //   }
-  // }, [authLoading, isAuthenticated, navigate]);
-  useEffect(() => {
-  let mounted = true;
+  const { user } = useAuth();
+  const { diagrams, loading, error, currentDiagram, teamId, createDiagram, selectDiagram, deleteDiagram, updateDiagram, logout } =
+    useCloudSync(user?.id ?? null);
+  const [syncing, setSyncing] = useState(false);
 
-  (async () => {
-    const { data } = await supabase.auth.getSession();
-    if (!mounted) return;
+  const handleSave = useCallback(
+    async (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean; is_locked?: boolean; name?: string }) => {
+      if (!currentDiagram?.id) return;
+      setSyncing(true);
+      try {
+        await updateDiagram(currentDiagram.id, updates);
+      } catch (err) {
+        console.error("Save failed", err);
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [currentDiagram?.id, updateDiagram]
+  );
 
-    const session = data.session;
-
-    // PASSWORD RECOVERY HAS HIGHEST PRIORITY
-    if (
-      session &&
-      window.location.hash.includes("type=recovery")
-    ) {
-      navigate("/reset-password", { replace: true });
-      setBootstrapped(true);
-      return;
-    }
-
-    // NOT AUTHENTICATED
-    if (!session) {
-      navigate("/auth", { replace: true });
-      setBootstrapped(true);
-      return;
-    }
-
-    // AUTHENTICATED
-    navigate("/diagrams", { replace: true });
-    setBootstrapped(true);
-  })();
-
-  return () => {
-    mounted = false;
-  };
-}, [navigate]);
-  if (!bootstrapped) {
-    return null;
-  }
-
-  if (authLoading) {
+  if (!user) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950">
-        <Loader2 className="animate-spin text-slate-400" size={32} />
+        <div className="text-center">Loading...</div>
       </div>
     );
   }
 
-  if (!isAuthenticated || !user) {
-    return null;
-  }
-
-  const handleSave = async (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => {
-    if (selectedDiagram) {
-      await saveDiagram(selectedDiagram.id, updates);
-    }
-  };
-
-  const handleBack = () => {
-    setSelectedDiagram(null);
-    setShowSelector(true);
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    navigate('/auth');
-  };
-
-  // Show diagram selector
-  if (showSelector && !selectedDiagram) {
+  if (currentDiagram) {
     return (
-      <DiagramSelector
-        diagrams={diagrams}
-        loading={cloudLoading || !profileExists}
-        error={cloudError}
-        teamId={teamId}
-        onSelect={async (diagram) => {
-          const loaded = await loadDiagram(diagram.id);
-          if (loaded) {
-            setSelectedDiagram(loaded);
-            setShowSelector(false);
-          }
-        }}
-        onCreate={async () => {
-          const newDiagram = await createDiagram('New Diagram');
-          if (newDiagram) {
-            setSelectedDiagram(newDiagram);
-            setShowSelector(false);
-          }
-        }}
-        onDelete={async (id) => {
-          await deleteDiagram(id);
-        }}
-        onLogout={handleLogout}
+      <ERDBuilder
+        user={user}
+        diagram={currentDiagram}
+        onSave={handleSave}
+        onBack={() => selectDiagram(null)}
+        syncing={syncing}
+        onLogout={() => logout()}
       />
     );
   }
 
-  const appUser: AppUser = {
-    id: user.id,
-    email: user.email,
-    name: user.user_metadata?.display_name || user.email,
-    user_metadata: user.user_metadata,
-  };
-
   return (
-    <ERDBuilder
-      user={appUser}
-      diagram={selectedDiagram}
-      onSave={handleSave}
-      onBack={handleBack}
-      syncing={syncing}
-      onLogout={handleLogout}
+    <DiagramSelector
+      diagrams={diagrams}
+      loading={loading}
+      error={error}
+      teamId={teamId}
+      onSelect={selectDiagram}
+      onCreate={createDiagram}
+      onDelete={deleteDiagram}
+      onLogout={() => logout()}
     />
   );
 }
