@@ -3,11 +3,6 @@ import { ChevronDown } from 'lucide-react';
 
 interface MinimapProps {
   tables: Array<{ x: number; y: number; id: string }>;
-  relations: Array<{ 
-    sourceTableId: string; 
-    targetTableId: string;
-    id: string;
-  }>;
   viewport: { x: number; y: number; zoom: number };
   isDarkMode: boolean;
   onViewportChange: (x: number, y: number, zoom: number) => void;
@@ -15,10 +10,10 @@ interface MinimapProps {
 
 const TABLE_W = 224;
 const HEADER_H = 40;
+const PADDING = 40;
 
 export function Minimap({
   tables,
-  relations,
   viewport,
   isDarkMode,
   onViewportChange,
@@ -28,7 +23,7 @@ export function Minimap({
   const { bounds, scale } = useMemo(() => {
     if (tables.length === 0) {
       return {
-        bounds: { minX: 0, minY: 0, maxX: 800, maxY: 600 },
+        bounds: { minX: 0, minY: 0, maxX: 800, maxY: 600, padding: PADDING },
         scale: 1
       };
     }
@@ -42,9 +37,8 @@ export function Minimap({
       maxY = Math.max(maxY, t.y + HEADER_H + 60);
     }
 
-    const padding = 40;
-    const contentWidth = (maxX - minX) + padding * 2;
-    const contentHeight = (maxY - minY) + padding * 2;
+    const contentWidth = (maxX - minX) + PADDING * 2;
+    const contentHeight = (maxY - minY) + PADDING * 2;
     const minimapWidth = 160;
     const minimapHeight = 120;
 
@@ -53,7 +47,7 @@ export function Minimap({
     const finalScale = Math.min(scaleX, scaleY, 1);
 
     return {
-      bounds: { minX, minY, maxX, maxY, padding },
+      bounds: { minX, minY, maxX, maxY, padding: PADDING },
       scale: finalScale
     };
   }, [tables]);
