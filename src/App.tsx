@@ -43,6 +43,8 @@ import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
 import { usePresence } from "./hooks/usePresence";
 import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
+import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
+import { Minimap } from "./components/Minimap";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
@@ -218,6 +220,9 @@ const [newCommentText, setNewCommentText] = useState("");
 // Feature 5: Sample Data
 const [sampleDataShown, setSampleDataShown] = useState(false);
 const [sampleData, setSampleData] = useState<any[]>([]);
+
+// Feature 6: Keyboard shortcuts overlay
+const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1284,11 +1289,26 @@ const selectedTableRelationships = useMemo(() => {
         // Reset zoom with Ctrl+0
         e.preventDefault();
         resetViewport();
+      } else if (e.key === "/" && ctrlOrCmd) {
+        // Toggle keyboard shortcuts overlay with Ctrl+/
+        e.preventDefault();
+        setShowKeyboardShortcuts((prev) => !prev);
+      } else if (e.key === "Escape" && showKeyboardShortcuts) {
+        // Close keyboard shortcuts overlay with Escape
+        e.preventDefault();
+        setShowKeyboardShortcuts(false);
+      } else if (e.key.toLowerCase() === "n" && !ctrlOrCmd && !e.shiftKey) {
+        // Add new table with N key (only if not typing in an input)
+        const activeElement = document.activeElement;
+        if (activeElement?.tagName !== 'INPUT' && activeElement?.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          addTable();
+        }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push, zoomIn, zoomOut]);
+  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push, zoomIn, zoomOut, showKeyboardShortcuts, addTable]);
 
   // --- SCHEMA TEMPLATES ---
   const templates: { name: string; apply: () => void }[] = [
@@ -2504,12 +2524,29 @@ const selectedTableRelationships = useMemo(() => {
         </div>
       </div>
 
+      {/* Minimap */}
+      <Minimap
+        tables={tables}
+        viewport={viewport}
+        canvasWidth={typeof window !== 'undefined' ? window.innerWidth - 380 : 1000}
+        canvasHeight={typeof window !== 'undefined' ? window.innerHeight - 60 : 800}
+        onViewportChange={(x, y) => setViewport((prev) => ({ ...prev, x, y }))}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Keyboard Shortcuts Overlay */}
+      <KeyboardShortcutsOverlay
+        isOpen={showKeyboardShortcuts}
+        onClose={() => setShowKeyboardShortcuts(false)}
+        isDarkMode={isDarkMode}
+      />
+
       {/* Toasts */}
       <div className="pointer-events-none fixed bottom-4 right-4 flex flex-col gap-2 z-[60]">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto px-4 py-2 rounded-lg shadow-lg backdrop-blur-md border text-sm transition-all ${
+            className={`pointer-events-auto px-4 py-2 rounded-lg shadow-lg backdrop-blur-md border text-sm animate-fade-in transition-all ${
               t.type === "success"
                 ? isDarkMode
                   ? "bg-emerald-900/50 border-emerald-700 text-emerald-200"
@@ -2549,6 +2586,7 @@ export default function App() {
     saveDiagram,
     deleteDiagram,
     loadDiagram,
+    fetchDiagrams,
     profileExists,
     error: cloudError,
   } = useCloudSync(userId);
@@ -2649,6 +2687,13 @@ export default function App() {
         }}
         onDelete={async (id) => {
           await deleteDiagram(id);
+        }}
+        onRename={async (id, name) => {
+          await saveDiagram(id, { name } as any);
+          // Refresh diagrams
+          if (teamId) {
+            fetchDiagrams(teamId);
+          }
         }}
         onLogout={handleLogout}
       />

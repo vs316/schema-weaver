@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
-  FileText, 
   Trash2, 
   Clock, 
   Users, 
@@ -12,10 +11,14 @@ import {
   Settings,
   LogOut,
   UserPlus,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
 import { JoinTeamModal } from './JoinTeamModal';
+import { DiagramPreview } from './DiagramPreview';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -25,6 +28,7 @@ interface DiagramSelectorProps {
   onSelect: (diagram: ERDDiagram) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   onLogout: () => void;
 }
 
@@ -36,11 +40,15 @@ export function DiagramSelector({
   onSelect,
   onCreate,
   onDelete,
+  onRename,
   onLogout,
 }: DiagramSelectorProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
   const [showJoinTeam, setShowJoinTeam] = useState(false);
+  const [editingDiagramId, setEditingDiagramId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [hoveredDiagramId, setHoveredDiagramId] = useState<string | null>(null);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -226,26 +234,93 @@ export function DiagramSelector({
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="group relative rounded-xl border cursor-pointer transition-all duration-200 hover:border-opacity-60"
+                  className="group relative rounded-xl border cursor-pointer transition-all duration-200 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/10"
                   style={{
                     background: 'hsl(222 47% 6%)',
                     borderColor: 'hsl(217 33% 17%)',
                   }}
-                  onClick={() => onSelect(diagram)}
+                  onClick={() => !editingDiagramId && onSelect(diagram)}
+                  onMouseEnter={() => setHoveredDiagramId(diagram.id)}
+                  onMouseLeave={() => setHoveredDiagramId(null)}
                 >
-                  {/* Preview area */}
+                  {/* Preview area with diagram preview on hover */}
                   <div 
-                    className="h-32 rounded-t-xl flex items-center justify-center"
+                    className="h-32 rounded-t-xl flex items-center justify-center overflow-hidden relative"
                     style={{ background: 'hsl(222 47% 8%)' }}
                   >
-                    <FileText size={32} style={{ color: 'hsl(217 33% 25%)' }} />
+                    {hoveredDiagramId === diagram.id ? (
+                      <DiagramPreview 
+                        tables={diagram.tables} 
+                        relations={diagram.relations}
+                        isDarkMode={true}
+                      />
+                    ) : (
+                      <DiagramPreview 
+                        tables={diagram.tables} 
+                        relations={diagram.relations}
+                        isDarkMode={true}
+                      />
+                    )}
                   </div>
 
                   {/* Info */}
                   <div className="p-4">
-                    <h3 className="font-semibold truncate" style={{ color: 'hsl(210 40% 98%)' }}>
-                      {diagram.name}
-                    </h3>
+                    {editingDiagramId === diagram.id ? (
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="flex-1 px-2 py-1 rounded text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          style={{
+                            background: 'hsl(222 47% 8%)',
+                            borderColor: 'hsl(217 33% 25%)',
+                            color: 'hsl(210 40% 98%)',
+                          }}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              onRename(diagram.id, editName);
+                              setEditingDiagramId(null);
+                            } else if (e.key === 'Escape') {
+                              setEditingDiagramId(null);
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            onRename(diagram.id, editName);
+                            setEditingDiagramId(null);
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                        >
+                          <Check size={14} style={{ color: 'hsl(142 76% 36%)' }} />
+                        </button>
+                        <button
+                          onClick={() => setEditingDiagramId(null)}
+                          className="p-1.5 rounded-lg hover:bg-red-500/20 transition-colors"
+                        >
+                          <X size={14} style={{ color: 'hsl(0 84% 60%)' }} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold truncate flex-1" style={{ color: 'hsl(210 40% 98%)' }}>
+                          {diagram.name}
+                        </h3>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditName(diagram.name);
+                            setEditingDiagramId(diagram.id);
+                          }}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-700 transition-all"
+                          title="Rename diagram"
+                        >
+                          <Edit2 size={12} style={{ color: 'hsl(215 20% 65%)' }} />
+                        </button>
+                      </div>
+                    )}
                     
                     <div className="mt-2 flex items-center gap-4 text-xs" style={{ color: 'hsl(215 20% 65%)' }}>
                       <span className="flex items-center gap-1">
