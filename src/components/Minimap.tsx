@@ -91,7 +91,7 @@ export function Minimap({
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`absolute bottom-4 right-4 rounded-lg border shadow-lg overflow-hidden cursor-pointer ${
+      className={`absolute top-16 right-4 rounded-lg border shadow-lg overflow-hidden cursor-pointer z-30 ${
         isDarkMode ? 'bg-slate-900/90 border-slate-700' : 'bg-white/90 border-slate-200'
       }`}
       style={{ 
