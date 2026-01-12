@@ -1876,6 +1876,7 @@ const selectedTableRelationships = useMemo(() => {
           className={`border-l shadow-2xl z-30 flex flex-col transition-all duration-300 overflow-hidden ${
             isSidebarOpen ? "w-80" : "w-0"
           } ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"}`}
+          style={{ marginTop: '120px', height: 'calc(100% - 120px)' }}
         >
           {/* Header with toggle button */}
           <div

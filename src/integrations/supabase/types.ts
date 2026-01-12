@@ -189,6 +189,8 @@ export type Database = {
         Returns: string
       }
       get_user_team_id: { Args: { user_id: string }; Returns: string }
+      is_team_member: { Args: { p_team_id: string }; Returns: boolean }
+      is_team_owner_or_admin: { Args: { p_team_id: string }; Returns: boolean }
       join_team_by_invite: { Args: { p_invite_code: string }; Returns: Json }
       lookup_team_by_invite_code: {
         Args: { p_invite_code: string }
