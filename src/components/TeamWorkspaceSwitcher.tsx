@@ -41,7 +41,7 @@ export function TeamWorkspaceSwitcher({
   const [isOpen, setIsOpen] = useState(false);
   const [teams, setTeams] = useState<TeamMembership[]>([]);
   const [loading, setLoading] = useState(true);
-  const [switching, setSwitching] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTeams();
@@ -57,10 +57,16 @@ export function TeamWorkspaceSwitcher({
     }
 
     // Fetch all teams the user is a member of
-    const { data: memberships } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from('team_members')
       .select('team_id, role')
       .eq('user_id', user.id);
+
+    if (membershipError) {
+      console.error('Failed to fetch memberships:', membershipError);
+      setLoading(false);
+      return;
+    }
 
     if (!memberships || memberships.length === 0) {
       setLoading(false);
@@ -70,10 +76,16 @@ export function TeamWorkspaceSwitcher({
     const teamIds = memberships.map(m => m.team_id);
 
     // Fetch team details
-    const { data: teamsData } = await supabase
+    const { data: teamsData, error: teamsError } = await supabase
       .from('teams')
       .select('id, name')
       .in('id', teamIds);
+
+    if (teamsError) {
+      console.error('Failed to fetch teams:', teamsError);
+      setLoading(false);
+      return;
+    }
 
     // Get member counts
     const countPromises = teamIds.map(async (tid) => {
@@ -120,7 +132,7 @@ export function TeamWorkspaceSwitcher({
       return;
     }
 
-    setSwitching(true);
+    setSwitching(teamId);
 
     // Update profile with new team_id
     const { data: { user } } = await supabase.auth.getUser();
@@ -131,7 +143,7 @@ export function TeamWorkspaceSwitcher({
         .eq('id', user.id);
     }
 
-    setSwitching(false);
+    setSwitching(null);
     setIsOpen(false);
     onTeamSwitch(teamId);
   };
@@ -142,50 +154,57 @@ export function TeamWorkspaceSwitcher({
     return (
       <div 
         className="flex items-center gap-2 px-3 py-2 rounded-lg"
-        style={{ background: 'hsl(var(--secondary))' }}
+        style={{ background: 'hsl(222 47% 8%)' }}
       >
-        <Loader2 size={14} className="animate-spin" style={{ color: 'hsl(var(--muted-foreground))' }} />
-        <span className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>Loading...</span>
+        <Loader2 size={14} className="animate-spin" style={{ color: 'hsl(215 20% 65%)' }} />
+        <span className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>Loading...</span>
       </div>
     );
   }
 
+  if (teams.length === 0) {
+    return null;
+  }
+
   return (
     <div className="relative">
-      <button
+      <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:bg-white/5 border"
+        className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 border"
         style={{
-          background: 'hsl(var(--secondary))',
-          borderColor: isOpen ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--border))',
+          background: 'hsl(222 47% 8%)',
+          borderColor: isOpen ? 'hsl(239 84% 67% / 0.5)' : 'hsl(217 33% 17%)',
         }}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
       >
         <div
           className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
           style={{
-            background: 'hsl(var(--primary) / 0.2)',
-            color: 'hsl(var(--primary))',
+            background: 'hsl(239 84% 67% / 0.2)',
+            color: 'hsl(239 84% 67%)',
           }}
         >
           {activeTeam?.team_name?.[0]?.toUpperCase() || 'T'}
         </div>
         <div className="text-left">
-          <div className="text-sm font-medium truncate max-w-[120px]" style={{ color: 'hsl(var(--foreground))' }}>
+          <div className="text-sm font-medium truncate max-w-[120px]" style={{ color: 'hsl(210 40% 98%)' }}>
             {activeTeam?.team_name || 'Select Team'}
           </div>
           {activeTeam && (
-            <div className="flex items-center gap-1 text-[10px]" style={{ color: 'hsl(var(--muted-foreground))' }}>
+            <div className="flex items-center gap-1 text-[10px]" style={{ color: 'hsl(215 20% 65%)' }}>
               {ROLE_ICONS[activeTeam.role]}
               <span>{activeTeam.member_count} members</span>
             </div>
           )}
         </div>
-        <ChevronDown 
-          size={14} 
-          className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          style={{ color: 'hsl(var(--muted-foreground))' }}
-        />
-      </button>
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+        </motion.div>
+      </motion.button>
 
       <AnimatePresence>
         {isOpen && (
@@ -204,33 +223,42 @@ export function TeamWorkspaceSwitcher({
               initial={{ opacity: 0, y: -8, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
               className="absolute top-full left-0 mt-2 w-64 rounded-lg border shadow-xl z-50 overflow-hidden"
               style={{
-                background: 'hsl(var(--card))',
-                borderColor: 'hsl(var(--border))',
+                background: 'hsl(222 47% 6%)',
+                borderColor: 'hsl(217 33% 17%)',
               }}
             >
               <div className="p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1" style={{ color: 'hsl(var(--muted-foreground))' }}>
+                <div 
+                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1" 
+                  style={{ color: 'hsl(215 20% 65%)' }}
+                >
                   Your Workspaces
                 </div>
 
                 <div className="space-y-1 mt-1">
-                  {teams.map((team) => (
-                    <button
+                  {teams.map((team, index) => (
+                    <motion.button
                       key={team.team_id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
                       onClick={() => handleSwitch(team.team_id)}
-                      disabled={switching}
+                      disabled={switching !== null}
                       className={`w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors text-left ${
-                        team.is_active ? 'bg-primary/10' : 'hover:bg-white/5'
+                        team.is_active ? '' : 'hover:bg-white/5'
                       }`}
+                      style={{
+                        background: team.is_active ? 'hsl(239 84% 67% / 0.1)' : 'transparent',
+                      }}
                     >
                       <div
                         className="w-8 h-8 rounded flex items-center justify-center text-sm font-bold shrink-0"
                         style={{
-                          background: team.is_active ? 'hsl(var(--primary) / 0.2)' : 'hsl(var(--secondary))',
-                          color: team.is_active ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+                          background: team.is_active ? 'hsl(239 84% 67% / 0.2)' : 'hsl(222 47% 11%)',
+                          color: team.is_active ? 'hsl(239 84% 67%)' : 'hsl(215 20% 65%)',
                         }}
                       >
                         {team.team_name[0]?.toUpperCase() || 'T'}
@@ -240,24 +268,26 @@ export function TeamWorkspaceSwitcher({
                           {team.role === 'owner' && <Crown size={10} className="text-amber-500 shrink-0" />}
                           <span 
                             className="text-sm font-medium truncate" 
-                            style={{ color: 'hsl(var(--foreground))' }}
+                            style={{ color: 'hsl(210 40% 98%)' }}
                           >
                             {team.team_name}
                           </span>
                         </div>
-                        <div className="text-[10px]" style={{ color: 'hsl(var(--muted-foreground))' }}>
+                        <div className="text-[10px]" style={{ color: 'hsl(215 20% 65%)' }}>
                           {team.member_count} member{team.member_count !== 1 ? 's' : ''} • {team.role}
                         </div>
                       </div>
-                      {team.is_active && (
-                        <Check size={14} style={{ color: 'hsl(var(--primary))' }} />
-                      )}
-                    </button>
+                      {switching === team.team_id ? (
+                        <Loader2 size={14} className="animate-spin" style={{ color: 'hsl(239 84% 67%)' }} />
+                      ) : team.is_active ? (
+                        <Check size={14} style={{ color: 'hsl(239 84% 67%)' }} />
+                      ) : null}
+                    </motion.button>
                   ))}
                 </div>
               </div>
 
-              <div className="border-t p-2" style={{ borderColor: 'hsl(var(--border))' }}>
+              <div className="border-t p-2" style={{ borderColor: 'hsl(217 33% 17%)' }}>
                 <button
                   onClick={() => {
                     setIsOpen(false);
@@ -265,8 +295,8 @@ export function TeamWorkspaceSwitcher({
                   }}
                   className="w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors hover:bg-white/5"
                 >
-                  <Settings size={14} style={{ color: 'hsl(var(--muted-foreground))' }} />
-                  <span className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>
+                  <Settings size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+                  <span className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
                     Manage Teams
                   </span>
                 </button>
