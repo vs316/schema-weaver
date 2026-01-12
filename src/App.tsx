@@ -492,15 +492,15 @@ const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   }, [selectedTableId, selectedEdgeId, isDarkMode]);
 
   const handleWheel = (e: React.WheelEvent) => {
-    // Zoom centered on mouse position
-    const zoomSpeed = 0.001;
-    const minZoom = 0.2;
-    const maxZoom = 3;
-    const delta = -e.deltaY * zoomSpeed;
-    const newZoom = clamp(viewport.zoom + delta, minZoom, maxZoom);
-    
+    // Ctrl/Cmd + scroll = zoom towards mouse position
     if (e.ctrlKey || e.metaKey) {
-      // Zoom towards mouse position
+      e.preventDefault();
+      const zoomSpeed = 0.002;
+      const minZoom = 0.2;
+      const maxZoom = 3;
+      const delta = -e.deltaY * zoomSpeed;
+      const newZoom = clamp(viewport.zoom + delta, minZoom, maxZoom);
+      
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
         const mouseX = e.clientX - rect.left;
@@ -510,9 +510,16 @@ const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
         const newY = mouseY - (mouseY - viewport.y) * zoomRatio;
         setViewport({ x: newX, y: newY, zoom: newZoom });
       }
-    } else {
-      setViewport((prev) => ({ ...prev, zoom: newZoom }));
+      return;
     }
+    
+    // Two-finger trackpad scroll = pan (no modifier key)
+    // This works because trackpads report deltaX and deltaY for two-finger gestures
+    setViewport((prev) => ({
+      ...prev,
+      x: prev.x - e.deltaX,
+      y: prev.y - e.deltaY,
+    }));
   };
   
   // Zoom in/out functions for keyboard shortcuts
@@ -2696,6 +2703,10 @@ export default function App() {
           }
         }}
         onLogout={handleLogout}
+        onTeamSwitch={(newTeamId) => {
+          // Team switch handled by refresh in DiagramSelector
+          console.log('Switching to team:', newTeamId);
+        }}
       />
     );
   }

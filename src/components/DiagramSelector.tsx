@@ -4,21 +4,19 @@ import {
   Plus, 
   Trash2, 
   Clock, 
-  Users, 
+  Users,
   Cloud,
   Loader2,
   FolderOpen,
-  Settings,
   LogOut,
-  UserPlus,
   Edit2,
   Check,
   X,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
-import { JoinTeamModal } from './JoinTeamModal';
 import { DiagramPreview } from './DiagramPreview';
+import { TeamWorkspaceSwitcher } from './TeamWorkspaceSwitcher';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -30,6 +28,7 @@ interface DiagramSelectorProps {
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onLogout: () => void;
+  onTeamSwitch?: (teamId: string) => void;
 }
 
 export function DiagramSelector({
@@ -42,10 +41,10 @@ export function DiagramSelector({
   onDelete,
   onRename,
   onLogout,
+  onTeamSwitch,
 }: DiagramSelectorProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
-  const [showJoinTeam, setShowJoinTeam] = useState(false);
   const [editingDiagramId, setEditingDiagramId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [hoveredDiagramId, setHoveredDiagramId] = useState<string | null>(null);
@@ -133,44 +132,28 @@ export function DiagramSelector({
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3" style={{ color: 'hsl(210 40% 98%)' }}>
-              <Cloud size={28} style={{ color: 'hsl(239 84% 67%)' }} />
-              Your Diagrams
-            </h1>
-            <p className="mt-1 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
-              Select a diagram to continue or create a new one
-            </p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-3" style={{ color: 'hsl(210 40% 98%)' }}>
+                <Cloud size={28} style={{ color: 'hsl(239 84% 67%)' }} />
+                Your Diagrams
+              </h1>
+              <p className="mt-1 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                Select a diagram to continue or create a new one
+              </p>
+            </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            {/* Join Team Button */}
-            <button
-              onClick={() => setShowJoinTeam(true)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
-              style={{
-                background: 'hsl(142 76% 36% / 0.1)',
-                border: '1px solid hsl(142 76% 36% / 0.3)',
-                color: 'hsl(142 76% 36%)',
+          <div className="flex items-center gap-3">
+            {/* Team Workspace Switcher */}
+            <TeamWorkspaceSwitcher
+              currentTeamId={teamId}
+              onTeamSwitch={(newTeamId) => {
+                onTeamSwitch?.(newTeamId);
+                window.location.reload();
               }}
-            >
-              <UserPlus size={16} />
-              Join Team
-            </button>
-
-            {/* Team Settings Button */}
-            <button
-              onClick={() => setShowTeamSettings(true)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
-              style={{
-                background: 'hsl(222 47% 8%)',
-                border: '1px solid hsl(217 33% 17%)',
-                color: 'hsl(215 20% 65%)',
-              }}
-            >
-              <Settings size={16} />
-              Team
-            </button>
+              onOpenSettings={() => setShowTeamSettings(true)}
+            />
 
             {/* New Diagram Button */}
             <button
@@ -441,14 +424,6 @@ export function DiagramSelector({
               />
             </motion.div>
           </motion.div>
-        )}
-
-        {/* Join Team Modal */}
-        {showJoinTeam && (
-          <JoinTeamModal
-            onClose={() => setShowJoinTeam(false)}
-            onSuccess={() => window.location.reload()}
-          />
         )}
       </AnimatePresence>
     </div>

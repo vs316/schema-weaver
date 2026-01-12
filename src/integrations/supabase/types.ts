@@ -190,6 +190,13 @@ export type Database = {
       }
       get_user_team_id: { Args: { user_id: string }; Returns: string }
       join_team_by_invite: { Args: { p_invite_code: string }; Returns: Json }
+      lookup_team_by_invite_code: {
+        Args: { p_invite_code: string }
+        Returns: {
+          id: string
+          name: string
+        }[]
+      }
       migrate_team_members: { Args: never; Returns: undefined }
       regenerate_team_invite_code: { Args: never; Returns: string }
       update_member_role: {
