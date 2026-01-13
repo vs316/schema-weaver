@@ -11,6 +11,7 @@ const AuthPage = React.lazy(async () => {
   const mod = await import("./pages/Auth");
   return { default: mod.AuthPage };
 });
+const AdminPage = React.lazy(() => import("./pages/Admin"));
 
 type StartupCfg = {
   url: string;
@@ -81,8 +82,8 @@ export function Root() {
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="/*" element={<App />} />
-
           </Routes>
           {/* <DiagnosticsPanel /> */}
         </Suspense>

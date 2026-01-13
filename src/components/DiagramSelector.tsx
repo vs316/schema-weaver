@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
@@ -12,11 +13,13 @@ import {
   Edit2,
   Check,
   X,
+  Shield,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
 import { DiagramPreview } from './DiagramPreview';
 import { TeamWorkspaceSwitcher } from './TeamWorkspaceSwitcher';
+import { supabase } from '../integrations/supabase/safeClient';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -48,6 +51,24 @@ export function DiagramSelector({
   const [editingDiagramId, setEditingDiagramId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [hoveredDiagramId, setHoveredDiagramId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if user is admin
+    const checkAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('admin_users')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        setIsAdmin(!!data);
+      }
+    };
+    checkAdmin();
+  }, []);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -154,6 +175,21 @@ export function DiagramSelector({
               }}
               onOpenSettings={() => setShowTeamSettings(true)}
             />
+
+            {/* Admin Button */}
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
+                style={{
+                  background: 'hsl(38 92% 50% / 0.1)',
+                  color: 'hsl(38 92% 50%)',
+                }}
+                title="Admin Panel"
+              >
+                <Shield size={16} />
+              </button>
+            )}
 
             {/* New Diagram Button */}
             <button
