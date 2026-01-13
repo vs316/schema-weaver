@@ -1252,10 +1252,16 @@ const selectedTableRelationships = useMemo(() => {
     type: "info" 
   });
 } else if (e.key === "Delete" || e.key === "Backspace") {
-   if (isLocked) {
-    push({ title: "Diagram is locked", type: "info" });
-    return;
-  }
+        // Don't delete if user is typing in an input or textarea
+        const activeElement = document.activeElement;
+        if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') {
+          return; // Allow normal backspace behavior in inputs
+        }
+        
+        if (isLocked) {
+          push({ title: "Diagram is locked", type: "info" });
+          return;
+        }
         // Delete selected table/edge
         if (selectedTableId) {
           const tId = selectedTableId;

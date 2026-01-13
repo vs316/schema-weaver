@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_users: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          role: Database["public"]["Enums"]["admin_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          role?: Database["public"]["Enums"]["admin_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          role?: Database["public"]["Enums"]["admin_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       erd_diagrams: {
         Row: {
           created_at: string
@@ -189,6 +216,9 @@ export type Database = {
         Returns: string
       }
       get_user_team_id: { Args: { user_id: string }; Returns: string }
+      get_user_team_ids: { Args: { p_user_id: string }; Returns: string[] }
+      is_admin: { Args: { p_user_id: string }; Returns: boolean }
+      is_super_admin: { Args: { p_user_id: string }; Returns: boolean }
       is_team_member: { Args: { p_team_id: string }; Returns: boolean }
       is_team_owner_or_admin: { Args: { p_team_id: string }; Returns: boolean }
       join_team_by_invite: { Args: { p_invite_code: string }; Returns: Json }
@@ -205,9 +235,13 @@ export type Database = {
         Args: { p_member_user_id: string; p_new_role: string }
         Returns: Json
       }
+      users_share_team: {
+        Args: { user1_id: string; user2_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      admin_role: "super_admin" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -334,6 +368,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      admin_role: ["super_admin", "admin"],
+    },
   },
 } as const
