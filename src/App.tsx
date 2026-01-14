@@ -225,7 +225,7 @@ const [sampleData, setSampleData] = useState<any[]>([]);
 const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
 
 // Feature 7: Fullscreen mode  
-const [_isFullscreen, setIsFullscreen] = useState(false);
+// const [_isFullscreen, setIsFullscreen] = useState(false);
 
   // Keep refs in sync with state
   useEffect(() => {
