@@ -210,6 +210,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_edit_diagrams: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      can_manage_diagrams: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: boolean
+      }
       ensure_profile: { Args: never; Returns: string }
       get_user_role: {
         Args: { p_team_id: string; p_user_id: string }

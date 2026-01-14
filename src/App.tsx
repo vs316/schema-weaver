@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
-// Add these to your existing lucide-react import:
 import {
   Plus,
   X,
@@ -29,13 +28,12 @@ import {
   Cloud,
   ArrowLeft,
   Loader2,
-  Lock,           // ADD THIS
-  Unlock,         // ADD THIS
-  MessageSquare,  // ADD THIS for comments
-  Zap,           // ADD THIS for sample data
+  Lock,
+  Unlock,
+  MessageSquare,
+  Zap,
 } from "lucide-react";
 
-// Add these utility imports:
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
 import html2canvas from "html2canvas";
@@ -138,6 +136,7 @@ function ERDBuilder({
   onBack,
   syncing,
   onLogout,
+  teamId: _teamId,
 }: { 
   user: AppUser;
   diagram: ERDDiagram | null;
@@ -145,6 +144,7 @@ function ERDBuilder({
   onBack: () => void;
   syncing: boolean;
   onLogout: () => void;
+  teamId: string | null;
 }) {
   // --- STATE ---
   
@@ -223,6 +223,9 @@ const [sampleData, setSampleData] = useState<any[]>([]);
 
 // Feature 6: Keyboard shortcuts overlay
 const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+
+// Feature 7: Fullscreen mode  
+const [_isFullscreen, setIsFullscreen] = useState(false);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -588,10 +591,23 @@ const selectedTableRelationships = useMemo(() => {
   const isEdgeConnected = (id: string) => connected.connectedEdgeIds.has(id);
 
   const handleTableMouseDown = (e: React.MouseEvent, tableId: string) => {
-    // Feature 1: Check if locked
+    // Check if locked - still allow selection but not dragging
     if (isLocked) {
-      push({ title: "Diagram is locked", description: "Unlock to edit", type: "info" });
-      return;
+      // Allow selection in locked mode
+      if (!e.shiftKey) {
+        setMultiSelectedTableIds(new Set());
+        setSelectedTableId(tableId);
+      } else {
+        setMultiSelectedTableIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(tableId)) next.delete(tableId);
+          else next.add(tableId);
+          return next;
+        });
+        setSelectedTableId(tableId);
+      }
+      setSelectedEdgeId(null);
+      return; // Don't allow dragging
     }
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -2733,6 +2749,7 @@ export default function App() {
       onBack={handleBack}
       syncing={syncing}
       onLogout={handleLogout}
+      teamId={teamId}
     />
   );
 }
