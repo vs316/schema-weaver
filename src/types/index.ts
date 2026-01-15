@@ -28,7 +28,7 @@ export type Table = {
   comments?: TableComment[];
 };
 
-export type TeamRole = 'owner' | 'admin' | 'member' | 'viewer';
+export type TeamRole = 'owner' | 'admin' | 'member' | 'dev' | 'reader' | 'viewer';
 
 export interface TeamMember {
   id: string;

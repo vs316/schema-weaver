@@ -22,8 +22,12 @@ import {
   TrendingUp,
   Activity,
   Lock,
+  Power,
+  
+  UserCog,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
+import type { TeamRole } from '../types/index';
 
 type Tab = 'dashboard' | 'users' | 'diagrams' | 'teams' | 'admins';
 
@@ -62,6 +66,23 @@ interface Diagram {
   created_at: string;
 }
 
+interface TeamMemberWithRole {
+  id: string;
+  team_id: string;
+  user_id: string;
+  role: TeamRole;
+  team_name?: string;
+}
+
+const ROLE_OPTIONS: { value: TeamRole; label: string }[] = [
+  { value: 'owner', label: 'Owner' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'member', label: 'Member' },
+  { value: 'dev', label: 'Dev' },
+  { value: 'reader', label: 'Reader' },
+  { value: 'viewer', label: 'Viewer' },
+];
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -74,6 +95,7 @@ export default function AdminPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [diagrams, setDiagrams] = useState<Diagram[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberWithRole[]>([]);
   
   // UI states
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,16 +141,18 @@ export default function AdminPage() {
   const loadAllData = async () => {
     setRefreshing(true);
     
-    const [profilesRes, teamsRes, diagramsRes, adminsRes] = await Promise.all([
+    const [profilesRes, teamsRes, diagramsRes, adminsRes, membersRes] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('teams').select('*').order('created_at', { ascending: false }),
       supabase.from('erd_diagrams').select('*').order('updated_at', { ascending: false }),
       supabase.from('admin_users').select('*').order('created_at', { ascending: false }),
+      supabase.from('team_members').select('*').order('created_at', { ascending: false }),
     ]);
 
     setProfiles(profilesRes.data || []);
     setDiagrams(diagramsRes.data as Diagram[] || []);
     setAdmins(adminsRes.data || []);
+    setTeamMembers(membersRes.data as TeamMemberWithRole[] || []);
 
     // Get team member counts
     if (teamsRes.data) {
@@ -220,6 +244,37 @@ export default function AdminPage() {
     
     await supabase.from('admin_users').delete().eq('user_id', userId);
     setAdmins(prev => prev.filter(a => a.user_id !== userId));
+  };
+
+  const handleToggleAdminStatus = async (adminId: string, userId: string, currentRole: 'super_admin' | 'admin') => {
+    if (userId === currentUserId) {
+      alert('Cannot modify your own admin status');
+      return;
+    }
+    
+    if (currentRole === 'super_admin') {
+      // Cannot demote super admin
+      alert('Cannot modify super admin status');
+      return;
+    }
+    
+    // Toggle between active and disabled (remove admin)
+    await supabase.from('admin_users').delete().eq('id', adminId);
+    setAdmins(prev => prev.filter(a => a.id !== adminId));
+  };
+
+  const handleUpdateUserTeamRole = async (memberId: string, teamId: string, userId: string, newRole: TeamRole) => {
+    const { error } = await supabase
+      .from('team_members')
+      .update({ role: newRole })
+      .eq('team_id', teamId)
+      .eq('user_id', userId);
+    
+    if (!error) {
+      setTeamMembers(prev => prev.map(m => 
+        m.id === memberId ? { ...m, role: newRole } : m
+      ));
+    }
   };
 
   if (loading) {
@@ -355,7 +410,14 @@ export default function AdminPage() {
               <DashboardTab key="dashboard" stats={stats} />
             )}
             {activeTab === 'users' && (
-              <UsersTab key="users" profiles={filteredProfiles} teams={teams} />
+              <UsersTab 
+                key="users" 
+                profiles={filteredProfiles} 
+                teams={teams} 
+                teamMembers={teamMembers}
+                onUpdateRole={handleUpdateUserTeamRole}
+                isSuperAdmin={isSuperAdmin}
+              />
             )}
             {activeTab === 'diagrams' && (
               <DiagramsTab 
@@ -380,6 +442,7 @@ export default function AdminPage() {
                 currentUserId={currentUserId}
                 onAdd={handleAddAdmin}
                 onRemove={handleRemoveAdmin}
+                onToggleStatus={handleToggleAdminStatus}
               />
             )}
           </AnimatePresence>
@@ -475,11 +538,29 @@ function DashboardTab({ stats }: { stats: Record<string, number> }) {
   );
 }
 
-// Users Tab
-function UsersTab({ profiles, teams }: { profiles: Profile[]; teams: Team[] }) {
+// Users Tab with role editing
+function UsersTab({ 
+  profiles, 
+  teams, 
+  teamMembers,
+  onUpdateRole,
+  isSuperAdmin,
+}: { 
+  profiles: Profile[]; 
+  teams: Team[];
+  teamMembers: TeamMemberWithRole[];
+  onUpdateRole: (memberId: string, teamId: string, userId: string, newRole: TeamRole) => void;
+  isSuperAdmin: boolean;
+}) {
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  
   const getTeamName = (teamId: string | null) => {
     if (!teamId) return 'No team';
     return teams.find(t => t.id === teamId)?.name || 'Unknown';
+  };
+
+  const getUserMemberships = (userId: string) => {
+    return teamMembers.filter(m => m.user_id === userId);
   };
 
   return (
@@ -500,49 +581,128 @@ function UsersTab({ profiles, teams }: { profiles: Profile[]; teams: Team[] }) {
             <tr style={{ background: 'hsl(222 47% 8%)' }}>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>User</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Email</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Team</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Current Team</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Team Roles</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Joined</th>
+              {isSuperAdmin && (
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Actions</th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {profiles.map((profile) => (
-              <tr 
-                key={profile.id}
-                className="border-t transition-colors hover:bg-white/5"
-                style={{ borderColor: 'hsl(217 33% 17%)' }}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                      style={{ background: `hsl(${Math.abs((profile.email || 'U').charCodeAt(0) * 7) % 360} 70% 50%)` }}
-                    >
-                      {(profile.display_name || profile.email || 'U')[0].toUpperCase()}
+            {profiles.map((profile) => {
+              const memberships = getUserMemberships(profile.id);
+              const isEditing = editingUser === profile.id;
+              
+              return (
+                <tr 
+                  key={profile.id}
+                  className="border-t transition-colors hover:bg-white/5"
+                  style={{ borderColor: 'hsl(217 33% 17%)' }}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{ background: `hsl(${Math.abs((profile.email || 'U').charCodeAt(0) * 7) % 360} 70% 50%)` }}
+                      >
+                        {(profile.display_name || profile.email || 'U')[0].toUpperCase()}
+                      </div>
+                      <span className="font-medium" style={{ color: 'hsl(210 40% 98%)' }}>
+                        {profile.display_name || 'No name'}
+                      </span>
                     </div>
-                    <span className="font-medium" style={{ color: 'hsl(210 40% 98%)' }}>
-                      {profile.display_name || 'No name'}
+                  </td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                    {profile.email || 'N/A'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span 
+                      className="px-2 py-1 rounded text-xs"
+                      style={{ 
+                        background: 'hsl(217 33% 17%)',
+                        color: 'hsl(210 40% 98%)',
+                      }}
+                    >
+                      {getTeamName(profile.team_id)}
                     </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
-                  {profile.email || 'N/A'}
-                </td>
-                <td className="px-4 py-3">
-                  <span 
-                    className="px-2 py-1 rounded text-xs"
-                    style={{ 
-                      background: 'hsl(217 33% 17%)',
-                      color: 'hsl(210 40% 98%)',
-                    }}
-                  >
-                    {getTeamName(profile.team_id)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
-                  {new Date(profile.created_at).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-4 py-3">
+                    {isEditing ? (
+                      <div className="space-y-2 max-w-xs">
+                        {memberships.map(m => (
+                          <div key={m.id} className="flex items-center gap-2">
+                            <span className="text-xs truncate" style={{ color: 'hsl(215 20% 65%)' }}>
+                              {teams.find(t => t.id === m.team_id)?.name || 'Unknown'}:
+                            </span>
+                            <select
+                              value={m.role}
+                              onChange={(e) => onUpdateRole(m.id, m.team_id, m.user_id, e.target.value as TeamRole)}
+                              className="text-xs px-2 py-1 rounded border bg-transparent"
+                              style={{
+                                borderColor: 'hsl(217 33% 25%)',
+                                color: 'hsl(210 40% 98%)',
+                              }}
+                            >
+                              {ROLE_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setEditingUser(null)}
+                          className="text-xs px-2 py-1 rounded hover:bg-white/10"
+                          style={{ color: 'hsl(239 84% 67%)' }}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {memberships.length === 0 ? (
+                          <span className="text-xs" style={{ color: 'hsl(215 20% 45%)' }}>No teams</span>
+                        ) : (
+                          memberships.slice(0, 2).map(m => (
+                            <span 
+                              key={m.id}
+                              className="px-2 py-0.5 rounded text-[10px] font-medium"
+                              style={{ 
+                                background: m.role === 'owner' ? 'hsl(38 92% 50% / 0.1)' : 'hsl(239 84% 67% / 0.1)',
+                                color: m.role === 'owner' ? 'hsl(38 92% 50%)' : 'hsl(239 84% 67%)',
+                              }}
+                            >
+                              {m.role}
+                            </span>
+                          ))
+                        )}
+                        {memberships.length > 2 && (
+                          <span className="text-xs" style={{ color: 'hsl(215 20% 65%)' }}>+{memberships.length - 2}</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                    {new Date(profile.created_at).toLocaleDateString()}
+                  </td>
+                  {isSuperAdmin && (
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setEditingUser(isEditing ? null : profile.id)}
+                        className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                        title="Edit roles"
+                      >
+                        {isEditing ? (
+                          <Check size={14} style={{ color: 'hsl(142 76% 36%)' }} />
+                        ) : (
+                          <UserCog size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+                        )}
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         
@@ -776,19 +936,21 @@ function TeamsTab({
   );
 }
 
-// Admins Tab
+// Admins Tab with enable/disable functionality
 function AdminsTab({ 
   admins,
   isSuperAdmin,
   currentUserId,
   onAdd,
   onRemove,
+  onToggleStatus,
 }: { 
   admins: AdminUser[];
   isSuperAdmin: boolean;
   currentUserId: string | null;
   onAdd: (email: string) => void;
   onRemove: (userId: string) => void;
+  onToggleStatus: (adminId: string, userId: string, currentRole: 'super_admin' | 'admin') => void;
 }) {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -866,6 +1028,7 @@ function AdminsTab({
             <tr style={{ background: 'hsl(222 47% 8%)' }}>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Admin</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Role</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Status</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Added</th>
               {isSuperAdmin && (
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Actions</th>
@@ -909,19 +1072,43 @@ function AdminsTab({
                     {admin.role === 'super_admin' ? 'Super Admin' : 'Admin'}
                   </span>
                 </td>
+                <td className="px-4 py-3">
+                  <span 
+                    className="px-2 py-1 rounded text-xs font-medium flex items-center gap-1 w-fit"
+                    style={{ 
+                      background: 'hsl(142 76% 36% / 0.1)',
+                      color: 'hsl(142 76% 36%)',
+                    }}
+                  >
+                    <Power size={10} />
+                    Active
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
                   {new Date(admin.created_at).toLocaleDateString()}
                 </td>
                 {isSuperAdmin && (
                   <td className="px-4 py-3">
-                    {admin.user_id !== currentUserId && admin.role !== 'super_admin' && (
-                      <button
-                        onClick={() => onRemove(admin.user_id)}
-                        className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
-                      >
-                        <Trash2 size={14} style={{ color: 'hsl(0 84% 60%)' }} />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {admin.user_id !== currentUserId && admin.role !== 'super_admin' && (
+                        <>
+                          <button
+                            onClick={() => onToggleStatus(admin.id, admin.user_id, admin.role)}
+                            className="p-1.5 rounded hover:bg-amber-500/10 transition-colors"
+                            title="Disable admin access"
+                          >
+                            <Power size={14} style={{ color: 'hsl(38 92% 50%)' }} />
+                          </button>
+                          <button
+                            onClick={() => onRemove(admin.user_id)}
+                            className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
+                            title="Remove admin"
+                          >
+                            <Trash2 size={14} style={{ color: 'hsl(0 84% 60%)' }} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
