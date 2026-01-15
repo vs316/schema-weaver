@@ -49,6 +49,8 @@ const ROLE_ICONS: Record<TeamRole, React.ReactNode> = {
   owner: <Crown size={12} className="text-amber-500" />,
   admin: <Shield size={12} className="text-indigo-400" />,
   member: <User size={12} className="text-slate-400" />,
+  dev: <User size={12} className="text-emerald-400" />,
+  reader: <Eye size={12} className="text-cyan-400" />,
   viewer: <Eye size={12} className="text-slate-500" />,
 };
 
@@ -56,6 +58,8 @@ const ROLE_LABELS: Record<TeamRole, string> = {
   owner: 'Owner',
   admin: 'Admin',
   member: 'Member',
+  dev: 'Dev',
+  reader: 'Reader',
   viewer: 'Viewer',
 };
 
@@ -779,7 +783,7 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
                                         value={member.role}
                                         onChange={(e) => updateMemberRole(team.team_id, member.user_id, e.target.value as TeamRole)}
                                         disabled={updatingRole === member.user_id}
-                                        className="text-xs px-1.5 py-0.5 rounded border bg-transparent cursor-pointer"
+                                        className="text-xs px-1.5 py-0.5 rounded border bg-transparent cursor-pointer min-w-[80px]"
                                         style={{
                                           borderColor: 'hsl(var(--border))',
                                           color: 'hsl(var(--foreground))',
@@ -787,6 +791,8 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
                                       >
                                         <option value="admin">Admin</option>
                                         <option value="member">Member</option>
+                                        <option value="dev">Dev</option>
+                                        <option value="reader">Reader</option>
                                         <option value="viewer">Viewer</option>
                                       </select>
                                     ) : (

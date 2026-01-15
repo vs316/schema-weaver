@@ -991,47 +991,51 @@ const selectedTableRelationships = useMemo(() => {
   const exportPNG = useCallback(async () => {
     if (!canvasRef.current) return;
     try {
+      push({ title: "Exporting PNG...", type: "info" });
+      
+      // Calculate the true bounds of all tables to get full diagram extent
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const t of tables) {
+        const tableHeight = HEADER_H + 20 + t.columns.length * 16;
+        minX = Math.min(minX, t.x);
+        minY = Math.min(minY, t.y);
+        maxX = Math.max(maxX, t.x + TABLE_W);
+        maxY = Math.max(maxY, t.y + tableHeight);
+      }
+
+      // Handle empty diagram
+      if (tables.length === 0) {
+        minX = 0;
+        minY = 0;
+        maxX = 800;
+        maxY = 600;
+      }
+
+      // Add generous padding
+      const padding = 80;
+      const diagramWidth = maxX - minX + padding * 2;
+      const diagramHeight = maxY - minY + padding * 2;
+      
       // Create a temporary container to clone the canvas without transforms
       const tempContainer = document.createElement("div");
       tempContainer.style.position = "absolute";
       tempContainer.style.left = "-9999px";
       tempContainer.style.top = "-9999px";
       tempContainer.style.backgroundColor = isDarkMode ? "#0f172a" : "#f8fafc";
-      tempContainer.style.width = "1600px";
-      tempContainer.style.height = "1200px";
+      tempContainer.style.width = `${diagramWidth}px`;
+      tempContainer.style.height = `${diagramHeight}px`;
       tempContainer.style.overflow = "hidden";
       
       document.body.appendChild(tempContainer);
 
       // Render all tables and relations directly without viewport transforms
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("width", "1600");
-      svg.setAttribute("height", "1200");
-      svg.setAttribute("viewBox", "0 0 1600 1200");
+      svg.setAttribute("width", diagramWidth.toString());
+      svg.setAttribute("height", diagramHeight.toString());
+      svg.setAttribute("viewBox", `0 0 ${diagramWidth} ${diagramHeight}`);
       svg.style.background = isDarkMode ? "#0f172a" : "#f8fafc";
 
-      // Calculate bounds
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const t of tables) {
-        minX = Math.min(minX, t.x);
-        minY = Math.min(minY, t.y);
-        maxX = Math.max(maxX, t.x + TABLE_W);
-        maxY = Math.max(maxY, t.y + HEADER_H + 20 + t.columns.length * 16);
-      }
-
-      if (tables.length === 0) {
-        minX = minY = 0;
-        maxX = 1600;
-        maxY = 1200;
-      }
-
-      const padding = 40;
-      const width = Math.max(1600, maxX - minX + padding * 2);
-      const height = Math.max(1200, maxY - minY + padding * 2);
-      svg.setAttribute("width", width.toString());
-      svg.setAttribute("height", height.toString());
-
-      // Draw relations
+      // Draw relations first (behind tables)
       for (const r of relations) {
         const a = getAnchors(r);
         if (!a) continue;
@@ -1045,14 +1049,14 @@ const selectedTableRelationships = useMemo(() => {
         path.setAttribute("d", pathData);
         path.setAttribute("fill", "none");
         path.setAttribute("stroke", isDarkMode ? "#475569" : "#94a3b8");
-        path.setAttribute("stroke-width", r.isDashed ? "2" : "2");
+        path.setAttribute("stroke-width", "2");
         if (r.isDashed) path.setAttribute("stroke-dasharray", "5,5");
         svg.appendChild(path);
 
         // Draw arrow
         const arrowPath = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
         const angle = Math.atan2(ty - cy, tx - cx);
-        const arrowSize = 8;
+        const arrowSize = 10;
         const px = tx - minX + padding - arrowSize * Math.cos(angle);
         const py = ty - minY + padding - arrowSize * Math.sin(angle);
         const p1x = px - arrowSize * Math.cos(angle - Math.PI / 6);
@@ -1062,46 +1066,118 @@ const selectedTableRelationships = useMemo(() => {
         arrowPath.setAttribute("points", `${tx - minX + padding},${ty - minY + padding} ${p1x},${p1y} ${p2x},${p2y}`);
         arrowPath.setAttribute("fill", isDarkMode ? "#475569" : "#94a3b8");
         svg.appendChild(arrowPath);
+
+        // Draw edge label if exists
+        if (r.label) {
+          const labelX = (sx + tx) / 2 - minX + padding;
+          const labelY = (sy + ty) / 2 - minY + padding - 10;
+          const labelText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          labelText.setAttribute("x", labelX.toString());
+          labelText.setAttribute("y", labelY.toString());
+          labelText.setAttribute("text-anchor", "middle");
+          labelText.setAttribute("fill", isDarkMode ? "#94a3b8" : "#64748b");
+          labelText.setAttribute("font-size", "10");
+          labelText.textContent = r.label;
+          svg.appendChild(labelText);
+        }
       }
 
-      // Draw tables
+      // Draw tables with all details
       for (const t of tables) {
+        const tableHeight = HEADER_H + 20 + t.columns.length * 16;
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        
+        // Table shadow
+        const shadow = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        shadow.setAttribute("x", (t.x - minX + padding + 4).toString());
+        shadow.setAttribute("y", (t.y - minY + padding + 4).toString());
+        shadow.setAttribute("width", TABLE_W.toString());
+        shadow.setAttribute("height", tableHeight.toString());
+        shadow.setAttribute("fill", "rgba(0,0,0,0.2)");
+        shadow.setAttribute("rx", "8");
+        g.appendChild(shadow);
         
         // Table background
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         rect.setAttribute("x", (t.x - minX + padding).toString());
         rect.setAttribute("y", (t.y - minY + padding).toString());
         rect.setAttribute("width", TABLE_W.toString());
-        rect.setAttribute("height", (HEADER_H + 20 + t.columns.length * 16).toString());
-        rect.setAttribute("fill", t.color || "#64748b");
-        rect.setAttribute("rx", "4");
+        rect.setAttribute("height", tableHeight.toString());
+        rect.setAttribute("fill", isDarkMode ? "#1e293b" : "#ffffff");
+        rect.setAttribute("stroke", t.color || "#64748b");
+        rect.setAttribute("stroke-width", "2");
+        rect.setAttribute("rx", "8");
         g.appendChild(rect);
 
-        // Create foreignObject for text content (simpler for now)
-        const fo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
-        fo.setAttribute("x", (t.x - minX + padding + 4).toString());
-        fo.setAttribute("y", (t.y - minY + padding + 4).toString());
-        fo.setAttribute("width", (TABLE_W - 8).toString());
-        fo.setAttribute("height", (HEADER_H - 8).toString());
+        // Header background
+        const headerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        headerRect.setAttribute("x", (t.x - minX + padding).toString());
+        headerRect.setAttribute("y", (t.y - minY + padding).toString());
+        headerRect.setAttribute("width", TABLE_W.toString());
+        headerRect.setAttribute("height", HEADER_H.toString());
+        headerRect.setAttribute("fill", t.color || "#64748b");
+        headerRect.setAttribute("rx", "8");
+        g.appendChild(headerRect);
         
-        const heading = document.createElement("div");
-        heading.style.fontSize = "13px";
-        heading.style.fontWeight = "bold";
-        heading.style.color = "white";
-        heading.style.padding = "2px";
-        heading.textContent = t.name;
-        fo.appendChild(heading);
-        g.appendChild(fo);
+        // Header bottom cover (to make bottom corners square)
+        const headerBottom = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        headerBottom.setAttribute("x", (t.x - minX + padding).toString());
+        headerBottom.setAttribute("y", (t.y - minX + padding + HEADER_H - 8).toString());
+        headerBottom.setAttribute("width", TABLE_W.toString());
+        headerBottom.setAttribute("height", "8");
+        headerBottom.setAttribute("fill", t.color || "#64748b");
+        g.appendChild(headerBottom);
+        
+        // Table name text
+        const tableName = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        tableName.setAttribute("x", (t.x - minX + padding + 12).toString());
+        tableName.setAttribute("y", (t.y - minY + padding + 24).toString());
+        tableName.setAttribute("fill", "white");
+        tableName.setAttribute("font-size", "13");
+        tableName.setAttribute("font-weight", "bold");
+        tableName.setAttribute("font-family", "system-ui, -apple-system, sans-serif");
+        tableName.textContent = t.name;
+        g.appendChild(tableName);
+
+        // Draw columns
+        t.columns.forEach((col, i) => {
+          const colY = t.y - minY + padding + HEADER_H + 16 + i * 16;
+          
+          // Column text
+          const colText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          colText.setAttribute("x", (t.x - minX + padding + 12).toString());
+          colText.setAttribute("y", colY.toString());
+          colText.setAttribute("fill", isDarkMode ? "#e2e8f0" : "#334155");
+          colText.setAttribute("font-size", "11");
+          colText.setAttribute("font-family", "ui-monospace, monospace");
+          
+          // Add key indicators
+          let prefix = "";
+          if (col.isPk) prefix += "🔑 ";
+          if (col.isFk) prefix += "🔗 ";
+          colText.textContent = `${prefix}${col.name}`;
+          g.appendChild(colText);
+          
+          // Column type
+          const typeText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          typeText.setAttribute("x", (t.x - minX + padding + TABLE_W - 12).toString());
+          typeText.setAttribute("y", colY.toString());
+          typeText.setAttribute("fill", isDarkMode ? "#64748b" : "#94a3b8");
+          typeText.setAttribute("font-size", "9");
+          typeText.setAttribute("text-anchor", "end");
+          typeText.setAttribute("font-family", "ui-monospace, monospace");
+          typeText.textContent = col.type;
+          g.appendChild(typeText);
+        });
 
         svg.appendChild(g);
       }
 
       tempContainer.appendChild(svg);
 
-      // Use html2canvas with better config
+      // Use html2canvas with better config for crisp output
       const canvas = await html2canvas(tempContainer, {
-        backgroundColor: null,
+        backgroundColor: isDarkMode ? "#0f172a" : "#f8fafc",
         scale: 2,
         useCORS: true,
         allowTaint: true,
@@ -1111,13 +1187,13 @@ const selectedTableRelationships = useMemo(() => {
 
       const link = document.createElement("a");
       link.download = `erd-diagram-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = canvas.toDataURL("image/png");
+      link.href = canvas.toDataURL("image/png", 1.0);
       link.click();
       URL.revokeObjectURL(link.href);
       
       document.body.removeChild(tempContainer);
       
-      push({ title: "PNG exported", type: "success" });
+      push({ title: "PNG exported", description: `${Math.round(diagramWidth)}x${Math.round(diagramHeight)}px`, type: "success" });
     } catch (err) {
       console.error("PNG export error:", err);
       push({ title: "PNG export failed", description: "Could not render diagram", type: "error" });

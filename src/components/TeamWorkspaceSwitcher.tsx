@@ -30,6 +30,8 @@ const ROLE_ICONS: Record<TeamRole, React.ReactNode> = {
   owner: <Crown size={12} className="text-amber-500" />,
   admin: <Shield size={12} className="text-indigo-400" />,
   member: <User size={12} className="text-slate-400" />,
+  dev: <User size={12} className="text-emerald-400" />,
+  reader: <User size={12} className="text-cyan-400" />,
   viewer: <User size={12} className="text-slate-500" />,
 };
 
