@@ -17,6 +17,7 @@ import {
   Upload,
   CheckCircle2,
   Maximize,
+  Minimize,
   LogOut,
   ChevronRight,
   ChevronLeft,
@@ -33,6 +34,11 @@ import {
   MessageSquare,
   Zap,
 } from "lucide-react";
+
+import { CollapsibleSection } from "./components/CollapsibleSection";
+import { useUserRole } from "./hooks/useUserRole";
+import { useRealTimeNotifications } from "./hooks/useRealTimeNotifications";
+import { RealTimeNotification } from "./components/RealTimeNotification";
 
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
@@ -225,7 +231,11 @@ const [sampleData, setSampleData] = useState<any[]>([]);
 const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
 
 // Feature 7: Fullscreen mode  
-// const [_isFullscreen, setIsFullscreen] = useState(false);
+const [isFullscreen, setIsFullscreen] = useState(false);
+
+// Feature 8: Real-time notifications & user role (using hooks)
+const userRole = useUserRole(_teamId);
+const { notifications, dismiss: dismissNotification, dismissAll: dismissAllNotifications } = useRealTimeNotifications(_teamId, user.id, diagram?.id ?? null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1035,22 +1045,33 @@ const selectedTableRelationships = useMemo(() => {
       svg.setAttribute("viewBox", `0 0 ${diagramWidth} ${diagramHeight}`);
       svg.style.background = isDarkMode ? "#0f172a" : "#f8fafc";
 
-      // Draw relations first (behind tables)
+      // Draw relations (clean lines, no debug artifacts)
       for (const r of relations) {
         const a = getAnchors(r);
         if (!a) continue;
 
         const { sx, sy, tx, ty, cx, cy } = a;
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        
+        // Calculate proper offset values
+        const offsetSx = sx - minX + padding;
+        const offsetSy = sy - minY + padding;
+        const offsetTx = tx - minX + padding;
+        const offsetTy = ty - minY + padding;
+        const offsetCx = cx - minX + padding;
+        const offsetCy = cy - minY + padding;
+        
         const pathData = r.lineType === "straight" 
-          ? `M ${sx - minX + padding} ${sy - minY + padding} L ${cx - minX + padding} ${cy - minY + padding} L ${tx - minX + padding} ${ty - minY + padding}`
-          : `M ${sx - minX + padding} ${sy - minY + padding} Q ${cx - minX + padding} ${cy - minY + padding} ${tx - minX + padding} ${ty - minY + padding}`;
+          ? `M ${offsetSx} ${offsetSy} L ${offsetCx} ${offsetCy} L ${offsetTx} ${offsetTy}`
+          : `M ${offsetSx} ${offsetSy} Q ${offsetCx} ${offsetCy} ${offsetTx} ${offsetTy}`;
         
         path.setAttribute("d", pathData);
         path.setAttribute("fill", "none");
-        path.setAttribute("stroke", isDarkMode ? "#475569" : "#94a3b8");
+        path.setAttribute("stroke", isDarkMode ? "#6366f1" : "#4f46e5");
         path.setAttribute("stroke-width", "2");
-        if (r.isDashed) path.setAttribute("stroke-dasharray", "5,5");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
+        if (r.isDashed) path.setAttribute("stroke-dasharray", "8,4");
         svg.appendChild(path);
 
         // Draw arrow
@@ -1087,14 +1108,14 @@ const selectedTableRelationships = useMemo(() => {
         const tableHeight = HEADER_H + 20 + t.columns.length * 16;
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         
-        // Table shadow
+        // Clean shadow (subtle, not the debug gray lines)
         const shadow = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        shadow.setAttribute("x", (t.x - minX + padding + 4).toString());
-        shadow.setAttribute("y", (t.y - minY + padding + 4).toString());
+        shadow.setAttribute("x", (t.x - minX + padding + 3).toString());
+        shadow.setAttribute("y", (t.y - minX + padding + 3).toString());
         shadow.setAttribute("width", TABLE_W.toString());
         shadow.setAttribute("height", tableHeight.toString());
-        shadow.setAttribute("fill", "rgba(0,0,0,0.2)");
-        shadow.setAttribute("rx", "8");
+        shadow.setAttribute("fill", isDarkMode ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.08)");
+        shadow.setAttribute("rx", "10");
         g.appendChild(shadow);
         
         // Table background
@@ -1104,28 +1125,28 @@ const selectedTableRelationships = useMemo(() => {
         rect.setAttribute("width", TABLE_W.toString());
         rect.setAttribute("height", tableHeight.toString());
         rect.setAttribute("fill", isDarkMode ? "#1e293b" : "#ffffff");
-        rect.setAttribute("stroke", t.color || "#64748b");
+        rect.setAttribute("stroke", t.color || (isDarkMode ? "#64748b" : "#94a3b8"));
         rect.setAttribute("stroke-width", "2");
-        rect.setAttribute("rx", "8");
+        rect.setAttribute("rx", "10");
         g.appendChild(rect);
 
-        // Header background
+        // Header background with proper clip
         const headerRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        headerRect.setAttribute("x", (t.x - minX + padding).toString());
-        headerRect.setAttribute("y", (t.y - minY + padding).toString());
-        headerRect.setAttribute("width", TABLE_W.toString());
-        headerRect.setAttribute("height", HEADER_H.toString());
-        headerRect.setAttribute("fill", t.color || "#64748b");
-        headerRect.setAttribute("rx", "8");
+        headerRect.setAttribute("x", (t.x - minX + padding + 1).toString());
+        headerRect.setAttribute("y", (t.y - minY + padding + 1).toString());
+        headerRect.setAttribute("width", (TABLE_W - 2).toString());
+        headerRect.setAttribute("height", (HEADER_H - 1).toString());
+        headerRect.setAttribute("fill", t.color || (isDarkMode ? "#64748b" : "#6366f1"));
+        headerRect.setAttribute("rx", "9");
         g.appendChild(headerRect);
         
-        // Header bottom cover (to make bottom corners square)
+        // Header bottom cover (square corners at bottom of header)
         const headerBottom = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        headerBottom.setAttribute("x", (t.x - minX + padding).toString());
-        headerBottom.setAttribute("y", (t.y - minX + padding + HEADER_H - 8).toString());
-        headerBottom.setAttribute("width", TABLE_W.toString());
-        headerBottom.setAttribute("height", "8");
-        headerBottom.setAttribute("fill", t.color || "#64748b");
+        headerBottom.setAttribute("x", (t.x - minX + padding + 1).toString());
+        headerBottom.setAttribute("y", (t.y - minY + padding + HEADER_H - 10).toString());
+        headerBottom.setAttribute("width", (TABLE_W - 2).toString());
+        headerBottom.setAttribute("height", "10");
+        headerBottom.setAttribute("fill", t.color || (isDarkMode ? "#64748b" : "#6366f1"));
         g.appendChild(headerBottom);
         
         // Table name text
@@ -1565,6 +1586,32 @@ const selectedTableRelationships = useMemo(() => {
   {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
 </button>
 
+{/* Fullscreen Toggle Button */}
+<button
+  onClick={() => {
+    setIsFullscreen(!isFullscreen);
+    if (!isFullscreen) {
+      document.documentElement.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+    push({
+      title: isFullscreen ? "Exited fullscreen" : "Entered fullscreen",
+      type: "info"
+    });
+  }}
+  title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+  className={`p-2 rounded-lg transition-all ${
+    isFullscreen
+      ? "bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30"
+      : isDarkMode
+      ? "hover:bg-slate-800 text-slate-300"
+      : "hover:bg-slate-200 text-slate-700"
+  }`}
+>
+  {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+</button>
+
 <span className="mx-2 opacity-30">|</span>
 
           
@@ -1574,6 +1621,13 @@ const selectedTableRelationships = useMemo(() => {
             users={presenceUsers} 
             isConnected={presenceConnected} 
             isDarkMode={isDarkMode} 
+          />
+          {/* Real-time Notifications */}
+          <RealTimeNotification
+            notifications={notifications}
+            onDismiss={dismissNotification}
+            onDismissAll={dismissAllNotifications}
+            isDarkMode={isDarkMode}
           />
           
           <span className="mx-2 opacity-30">|</span>
@@ -1815,20 +1869,20 @@ const selectedTableRelationships = useMemo(() => {
               const borderClass = primary
                 ? isDarkMode
                   ? "border-indigo-500 shadow-lg shadow-indigo-500/30"
-                  : "border-indigo-400 shadow-lg shadow-indigo-400/25"
+                  : "border-indigo-500 shadow-lg shadow-indigo-500/20"
                 : connectedTbl && anySel
                 ? isDarkMode
                   ? "border-indigo-300/60 shadow-indigo-500/10"
-                  : "border-indigo-300 shadow-indigo-300/15"
+                  : "border-indigo-400 shadow-indigo-400/15"
                 : isDarkMode
-                ? "border-slate-800 shadow-lg shadow-slate-950/30"
-                : "border-slate-300 shadow-md shadow-slate-400/15";
+                ? "border-slate-700 shadow-lg shadow-slate-950/30"
+                : "border-slate-300 shadow-md shadow-slate-300/40";
 
               return (
                 <div
                   key={table.id}
                   className={`absolute w-56 rounded-xl border-2 transition-all duration-300 select-none user-select-none hover:shadow-xl
-                    ${isDarkMode ? "bg-slate-900 text-slate-200" : "bg-white text-slate-800"}
+                    ${isDarkMode ? "bg-slate-900 text-slate-200" : "bg-white text-slate-800 shadow-lg"}
                     ${borderClass}
                     ${dimUnconnected ? "opacity-30 scale-95" : ""}
                   `}
@@ -1846,10 +1900,12 @@ const selectedTableRelationships = useMemo(() => {
                 >
                   <div
                     className={`p-3 rounded-t-xl cursor-grab active:cursor-grabbing border-b flex items-center justify-between min-w-0 user-select-none transition-colors duration-200
-                      ${isDarkMode ? "bg-slate-800/70 border-slate-700 hover:bg-slate-800" : "bg-slate-100 border-slate-200 hover:bg-slate-150"}`}
-                    style={{ background: table.color ? `${table.color}22` : undefined }}
+                      ${isDarkMode ? "bg-slate-800/70 border-slate-700 hover:bg-slate-800" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
+                    style={{ background: table.color ? `${table.color}${isDarkMode ? '25' : '18'}` : undefined }}
                   >
-                    <span className={`font-black text-[10px] uppercase tracking-widest opacity-70 truncate ${primary ? "text-indigo-200" : ""}`}>
+                    <span className={`font-black text-[10px] uppercase tracking-widest truncate ${
+                      primary ? (isDarkMode ? "text-indigo-200" : "text-indigo-700") : (isDarkMode ? "opacity-70" : "opacity-90 text-slate-700")
+                    }`}>
                       {table.name}
                     </span>
                     <div className="flex items-center gap-1">
@@ -1876,17 +1932,21 @@ const selectedTableRelationships = useMemo(() => {
                         }`}
                       >
                         <div className="flex items-center gap-1.5 overflow-hidden">
-                          {col.isPk && <Key size={10} className="text-amber-500 flex-shrink-0" />}
-                          {col.isFk && <LinkIcon size={10} className="text-indigo-500 flex-shrink-0" />}
+                          {col.isPk && <Key size={10} className={isDarkMode ? "text-amber-400" : "text-amber-600"} />}
+                          {col.isFk && <LinkIcon size={10} className={isDarkMode ? "text-indigo-400" : "text-indigo-600"} />}
                           <span
                             className={`truncate ${col.isPk ? "font-bold" : ""} ${
-                              isDarkMode ? (col.isPk ? "text-indigo-300" : "text-slate-300") : col.isPk ? "text-indigo-700" : "text-slate-700"
+                              isDarkMode 
+                                ? (col.isPk ? "text-indigo-300" : "text-slate-300") 
+                                : (col.isPk ? "text-indigo-700" : "text-slate-700")
                             }`}
                           >
                             {col.name}
                           </span>
                         </div>
-                        <span className={`text-[9px] font-mono flex-shrink-0 ml-1 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>{col.type}</span>
+                        <span className={`text-[9px] font-mono flex-shrink-0 ml-1 ${
+                          isDarkMode ? "text-slate-500" : "text-slate-500"
+                        }`}>{col.type}</span>
                       </div>
                     ))}
                   </div>
@@ -2022,30 +2082,32 @@ const selectedTableRelationships = useMemo(() => {
           />
         </div>
 
-        {/* Feature 3: Description */}
-        <div className="space-y-2">
-          <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Description (optional)
-          </label>
+        {/* Description Collapsible Section */}
+        <CollapsibleSection 
+          title="Description" 
+          icon={<FileText size={14} />} 
+          defaultOpen={!!t.description}
+          isDarkMode={isDarkMode}
+        >
           <textarea
             className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none border transition-all duration-200 resize-none ${
               isDarkMode
                 ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
                 : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
-            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            } ${(isLocked && !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
             rows={3}
             placeholder="Add notes about this table..."
             value={t.description || ""}
-            onChange={(e) => !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
+            onChange={(e) => userRole.canEdit && !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
             onBlur={() => pushHistory()}
-            disabled={isLocked}
+            disabled={isLocked && !userRole.canEdit}
           />
           {t.description && (
-            <div className={`text-[9px] opacity-75 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
+            <div className={`text-[9px] opacity-75 mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
               {t.description.length} characters
             </div>
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Color Picker */}
         <div className="space-y-2">
@@ -2308,56 +2370,53 @@ const selectedTableRelationships = useMemo(() => {
           </div>
         </div>
 
-        {/* Feature 4: Comments Section */}
-        <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-          <div className="flex items-center justify-between mb-3">
-            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-              <MessageSquare size={12} />
-              Comments {selectedTableComments.length > 0 && `(${selectedTableComments.length})`}
-            </label>
+        {/* Comments Collapsible Section */}
+        <CollapsibleSection
+          title="Comments"
+          icon={<MessageSquare size={14} />}
+          badge={selectedTableComments.length || undefined}
+          defaultOpen={selectedTableComments.length > 0}
+          isDarkMode={isDarkMode}
+        >
+          {/* Add comment form - Readers can add comments */}
+          <div className="mb-3 space-y-2">
+            <textarea
+              className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
+                isDarkMode
+                  ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
+                  : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
+              }`}
+              rows={2}
+              placeholder="Add a comment..."
+              value={newCommentText}
+              onChange={(e) => setNewCommentText(e.target.value)}
+            />
+            <button
+              onClick={() => {
+                if (newCommentText.trim()) {
+                  handleAddComment(newCommentText);
+                  setNewCommentText("");
+                  push({ title: "Comment added", type: "success" });
+                }
+              }}
+              disabled={!newCommentText.trim()}
+              className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              Post Comment
+            </button>
           </div>
-
-          {/* Add comment form */}
-          {!isLocked && (
-            <div className="mb-4 space-y-2">
-              <textarea
-                className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
-                  isDarkMode
-                    ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-                }`}
-                rows={2}
-                placeholder="Add a comment..."
-                value={newCommentText}
-                onChange={(e) => setNewCommentText(e.target.value)}
-              />
-              <button
-                onClick={() => {
-                  if (newCommentText.trim()) {
-                    handleAddComment(newCommentText);
-                    setNewCommentText("");
-                    push({ title: "Comment added", type: "success" });
-                  }
-                }}
-                disabled={!newCommentText.trim()}
-                className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-              >
-                Post Comment
-              </button>
-            </div>
-          )}
 
           {/* Comments list */}
           {selectedTableComments.length === 0 ? (
-            <div className={`text-xs text-center py-4 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+            <div className={`text-xs text-center py-2 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
               No comments yet
             </div>
           ) : (
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-2 max-h-48 overflow-y-auto">
               {selectedTableComments.map((comment: TableComment) => (
                 <div
                   key={comment.id}
-                  className={`p-2.5 rounded-lg border transition-all duration-200 ${
+                  className={`p-2 rounded-lg border transition-all duration-200 ${
                     isDarkMode ? "bg-slate-950/50 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-200 hover:border-slate-300"
                   }`}
                 >
@@ -2366,14 +2425,14 @@ const selectedTableRelationships = useMemo(() => {
                       <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
                         {comment.author_email?.split('@')[0] || 'User'}
                       </div>
-                      <div className={`text-xs my-1.5 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <div className={`text-xs my-1 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
                         {comment.content}
                       </div>
                       <div className={`text-[8px] ${isDarkMode ? "text-slate-600" : "text-slate-500"}`}>
-                        {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString()}
+                        {new Date(comment.created_at).toLocaleDateString()}
                       </div>
                     </div>
-                    {comment.author_id === user.id && !isLocked && (
+                    {comment.author_id === user.id && (
                       <button
                         onClick={() => handleDeleteComment(comment.id)}
                         className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
@@ -2387,7 +2446,7 @@ const selectedTableRelationships = useMemo(() => {
               ))}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Feature 5: Sample Data */}
         <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>

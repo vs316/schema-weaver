@@ -783,17 +783,18 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
                                         value={member.role}
                                         onChange={(e) => updateMemberRole(team.team_id, member.user_id, e.target.value as TeamRole)}
                                         disabled={updatingRole === member.user_id}
-                                        className="text-xs px-1.5 py-0.5 rounded border bg-transparent cursor-pointer min-w-[80px]"
+                                        className="text-xs px-1.5 py-0.5 rounded border cursor-pointer min-w-[80px]"
                                         style={{
-                                          borderColor: 'hsl(var(--border))',
-                                          color: 'hsl(var(--foreground))',
+                                          borderColor: 'hsl(217 33% 25%)',
+                                          backgroundColor: 'hsl(222 47% 11%)',
+                                          color: 'hsl(210 40% 98%)',
                                         }}
                                       >
-                                        <option value="admin">Admin</option>
-                                        <option value="member">Member</option>
-                                        <option value="dev">Dev</option>
-                                        <option value="reader">Reader</option>
-                                        <option value="viewer">Viewer</option>
+                                        <option value="admin" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Admin</option>
+                                        <option value="member" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Member</option>
+                                        <option value="dev" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Dev</option>
+                                        <option value="reader" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Reader</option>
+                                        <option value="viewer" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Viewer</option>
                                       </select>
                                     ) : (
                                       <span className="text-xs" style={{ color: 'hsl(var(--muted-foreground))' }}>
