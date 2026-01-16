@@ -638,14 +638,21 @@ function UsersTab({
                             <select
                               value={m.role}
                               onChange={(e) => onUpdateRole(m.id, m.team_id, m.user_id, e.target.value as TeamRole)}
-                              className="text-xs px-2 py-1 rounded border bg-transparent"
+                              className="text-xs px-2 py-1 rounded border cursor-pointer"
                               style={{
                                 borderColor: 'hsl(217 33% 25%)',
+                                backgroundColor: 'hsl(222 47% 11%)',
                                 color: 'hsl(210 40% 98%)',
                               }}
                             >
                               {ROLE_OPTIONS.map(opt => (
-                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                <option 
+                                  key={opt.value} 
+                                  value={opt.value}
+                                  style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}
+                                >
+                                  {opt.label}
+                                </option>
                               ))}
                             </select>
                           </div>
