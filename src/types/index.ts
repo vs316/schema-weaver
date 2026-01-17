@@ -6,6 +6,41 @@ export type Column = {
   isFk: boolean;
 };
 
+export type TableNote = {
+  id: string;
+  content: string;
+  author_id: string;
+  author_email: string;
+  created_at: string;
+};
+
+export type TableQuestion = {
+  id: string;
+  content: string;
+  author_id: string;
+  author_email: string;
+  created_at: string;
+  resolved?: boolean;
+};
+
+export type TableChange = {
+  id: string;
+  content: string;
+  author_id: string;
+  author_email: string;
+  created_at: string;
+  type: 'added' | 'modified' | 'removed';
+};
+
+export type TableFix = {
+  id: string;
+  content: string;
+  author_id: string;
+  author_email: string;
+  created_at: string;
+  priority: 'low' | 'medium' | 'high';
+};
+
 export type TableComment = {
   id: string;
   diagram_id?: string;
@@ -26,6 +61,10 @@ export type Table = {
   color?: string;
   description?: string;
   comments?: TableComment[];
+  notes?: TableNote[];
+  questions?: TableQuestion[];
+  changes?: TableChange[];
+  fixes?: TableFix[];
 };
 
 export type TeamRole = 'owner' | 'admin' | 'member' | 'dev' | 'reader' | 'viewer';

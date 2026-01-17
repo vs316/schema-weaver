@@ -33,12 +33,18 @@ import {
   Unlock,
   MessageSquare,
   Zap,
+  StickyNote,
+  HelpCircle,
+  GitCommit,
+  Wrench,
 } from "lucide-react";
 
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { useUserRole } from "./hooks/useUserRole";
 import { useRealTimeNotifications } from "./hooks/useRealTimeNotifications";
 import { RealTimeNotification } from "./components/RealTimeNotification";
+// TableSidebarSections is available but currently table-specific sections are inline
+// import { TableSidebarSections } from "./components/TableSidebarSections";
 
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
@@ -108,11 +114,23 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(Math.max(n, min), max);
 }
 
-/** --- SIMPLE TOASTS --- **/
+/** --- SIMPLE TOASTS with throttling --- **/
 type Toast = { id: string; title: string; description?: string; type?: "success" | "error" | "info" };
+const lastToastTimeRef: Record<string, number> = {};
+const TOAST_THROTTLE_MS = 5000; // Only show same toast type every 5 seconds
+
 function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const push = (t: Omit<Toast, "id">) => {
+    // Throttle repetitive toasts like "Synced to cloud"
+    const toastKey = t.title;
+    const now = Date.now();
+    if (lastToastTimeRef[toastKey] && now - lastToastTimeRef[toastKey] < TOAST_THROTTLE_MS) {
+      // Skip this toast as we just showed one
+      return;
+    }
+    lastToastTimeRef[toastKey] = now;
+    
     const toast = { ...t, id: generateId() };
     setToasts((prev) => [...prev, toast]);
     setTimeout(() => {
@@ -236,6 +254,11 @@ const [isFullscreen, setIsFullscreen] = useState(false);
 // Feature 8: Real-time notifications & user role (using hooks)
 const userRole = useUserRole(_teamId);
 const { notifications, dismiss: dismissNotification, dismissAll: dismissAllNotifications } = useRealTimeNotifications(_teamId, user.id, diagram?.id ?? null);
+
+// Feature 9: Collapsible minimap and resizable sidebar
+const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
+// Sidebar width can be used for resizable sidebar feature
+// const [sidebarWidth, setSidebarWidth] = useState(320);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -905,6 +928,9 @@ const selectedTableRelationships = useMemo(() => {
     push({ title: "Diagram is locked", type: "info" });
     return;
   }
+    // Push history BEFORE the change so undo works correctly
+    pushHistory();
+    
     setTables((prev) => {
       const src = prev.find((t) => t.id === sourceId);
       if (!src) return prev;
@@ -921,9 +947,8 @@ const selectedTableRelationships = useMemo(() => {
       setMultiSelectedTableIds(new Set([copy.id]));
       return [...prev, copy];
     });
-    pushHistory();
     push({ title: "Table duplicated", type: "success" });
-  }, [pushHistory, push]);
+  }, [isLocked, pushHistory, push]);
 
   const toggleRelation = useCallback((sourceId: string, targetId: string) => {
      // Feature 1: Check lock
@@ -1791,10 +1816,27 @@ const selectedTableRelationships = useMemo(() => {
                 const connectedEdge = isEdgeConnected(r.id);
                 const showHandle = isSelected;
                 const labelPos = r.label ? getLabelPos(r) : null;
+                
+                // Check if this relation is connected to the selected table for animation
+                const isAnimated = selectedTableId && 
+                  (r.sourceTableId === selectedTableId || r.targetTableId === selectedTableId);
 
                 return (
                   <g key={r.id} className="pointer-events-auto cursor-pointer">
                     <path d={path} fill="none" stroke="transparent" strokeWidth="22" onClick={(e) => handleEdgeClick(e as any, r.id)} />
+
+                    {/* Animated glow effect for connected relations */}
+                    {isAnimated && (
+                      <path
+                        d={path}
+                        fill="none"
+                        stroke="#6366f1"
+                        strokeWidth={6}
+                        strokeOpacity={0.3}
+                        strokeDasharray={r.isDashed ? "5,5" : "0"}
+                        className="animate-pulse"
+                      />
+                    )}
 
                     <path
                       d={path}
@@ -1802,9 +1844,24 @@ const selectedTableRelationships = useMemo(() => {
                       stroke={edgeStroke(r)}
                       strokeWidth={edgeWidth(r)}
                       strokeDasharray={r.isDashed ? "5,5" : "0"}
-                      className="transition-all"
+                      className="transition-all duration-300"
+                      style={{
+                        strokeDashoffset: isAnimated ? '0' : undefined,
+                        animation: isAnimated ? 'dash 1.5s ease-in-out infinite' : undefined,
+                      }}
                       onClick={(e) => handleEdgeClick(e as any, r.id)}
                     />
+
+                    {/* Animated flow indicators for selected table connections */}
+                    {isAnimated && !r.isDashed && (
+                      <circle r={4} fill="#6366f1">
+                        <animateMotion
+                          dur="2s"
+                          repeatCount="indefinite"
+                          path={path}
+                        />
+                      </circle>
+                    )}
 
                     {r.label && labelPos && (
                       <text
@@ -2029,12 +2086,15 @@ const selectedTableRelationships = useMemo(() => {
           )} */}
         </div>
 
-        {/* EDITOR SIDEBAR */}
+        {/* EDITOR SIDEBAR - expands when minimap is collapsed */}
         <div
           className={`border-l shadow-2xl z-30 flex flex-col transition-all duration-300 overflow-hidden ${
             isSidebarOpen ? "w-80" : "w-0"
           } ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"}`}
-          style={{ marginTop: '120px', height: 'calc(100% - 120px)' }}
+          style={{ 
+            marginTop: isMinimapCollapsed ? '56px' : '120px', 
+            height: isMinimapCollapsed ? 'calc(100% - 56px)' : 'calc(100% - 120px)' 
+          }}
         >
           {/* Header with toggle button */}
           <div
@@ -2107,6 +2167,147 @@ const selectedTableRelationships = useMemo(() => {
               {t.description.length} characters
             </div>
           )}
+        </CollapsibleSection>
+
+        {/* Notes Collapsible Section */}
+        <CollapsibleSection 
+          title="Notes" 
+          icon={<StickyNote size={14} />} 
+          badge={(t as any).notes?.length || undefined}
+          isDarkMode={isDarkMode}
+        >
+          <div className="space-y-2">
+            {((t as any).notes || []).map((note: any) => (
+              <div key={note.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-950" : "bg-white"}`}>
+                <p style={{ color: isDarkMode ? '#e2e8f0' : '#334155' }}>{note.content}</p>
+                <p className="text-[9px] mt-1" style={{ color: isDarkMode ? '#64748b' : '#94a3b8' }}>
+                  {note.author_email?.split('@')[0]} • {new Date(note.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+            {userRole.canEdit && !isLocked && (
+              <input
+                type="text"
+                placeholder="Add a note..."
+                className={`w-full px-3 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                    const note = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString() };
+                    setTables(prev => prev.map(x => x.id === t.id ? { ...x, notes: [...((x as any).notes || []), note] } as any : x));
+                    (e.target as HTMLInputElement).value = '';
+                    push({ title: "Note added", type: "success" });
+                  }
+                }}
+              />
+            )}
+          </div>
+        </CollapsibleSection>
+
+        {/* Questions Collapsible Section */}
+        <CollapsibleSection 
+          title="Questions" 
+          icon={<HelpCircle size={14} />} 
+          badge={(t as any).questions?.filter((q: any) => !q.resolved)?.length || undefined}
+          isDarkMode={isDarkMode}
+        >
+          <div className="space-y-2">
+            {((t as any).questions || []).map((q: any) => (
+              <div key={q.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-950" : "bg-white"}`}>
+                <p style={{ color: isDarkMode ? '#e2e8f0' : '#334155' }}>{q.content}</p>
+                <p className="text-[9px] mt-1" style={{ color: isDarkMode ? '#64748b' : '#94a3b8' }}>
+                  {q.author_email?.split('@')[0]} • {q.resolved ? '✓ Resolved' : 'Open'}
+                </p>
+              </div>
+            ))}
+            {userRole.canEdit && !isLocked && (
+              <input
+                type="text"
+                placeholder="Ask a question..."
+                className={`w-full px-3 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                    const question = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), resolved: false };
+                    setTables(prev => prev.map(x => x.id === t.id ? { ...x, questions: [...((x as any).questions || []), question] } as any : x));
+                    (e.target as HTMLInputElement).value = '';
+                    push({ title: "Question added", type: "success" });
+                  }
+                }}
+              />
+            )}
+          </div>
+        </CollapsibleSection>
+
+        {/* Changes Collapsible Section */}
+        <CollapsibleSection 
+          title="Changes" 
+          icon={<GitCommit size={14} />} 
+          badge={(t as any).changes?.length || undefined}
+          isDarkMode={isDarkMode}
+        >
+          <div className="space-y-2">
+            {((t as any).changes || []).map((change: any) => (
+              <div key={change.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-950" : "bg-white"}`}>
+                <p style={{ color: isDarkMode ? '#e2e8f0' : '#334155' }}>{change.content}</p>
+                <p className="text-[9px] mt-1" style={{ color: isDarkMode ? '#64748b' : '#94a3b8' }}>
+                  {change.author_email?.split('@')[0]} • {change.type || 'modified'}
+                </p>
+              </div>
+            ))}
+            {userRole.canEdit && !isLocked && (
+              <input
+                type="text"
+                placeholder="Log a change..."
+                className={`w-full px-3 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                    const change = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), type: 'modified' };
+                    setTables(prev => prev.map(x => x.id === t.id ? { ...x, changes: [...((x as any).changes || []), change] } as any : x));
+                    (e.target as HTMLInputElement).value = '';
+                    push({ title: "Change logged", type: "success" });
+                  }
+                }}
+              />
+            )}
+          </div>
+        </CollapsibleSection>
+
+        {/* Fixes Collapsible Section */}
+        <CollapsibleSection 
+          title="Fixes" 
+          icon={<Wrench size={14} />} 
+          badge={(t as any).fixes?.length || undefined}
+          isDarkMode={isDarkMode}
+        >
+          <div className="space-y-2">
+            {((t as any).fixes || []).map((fix: any) => (
+              <div key={fix.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-950" : "bg-white"}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                    {fix.priority || 'medium'}
+                  </span>
+                </div>
+                <p className="mt-1" style={{ color: isDarkMode ? '#e2e8f0' : '#334155' }}>{fix.content}</p>
+                <p className="text-[9px] mt-1" style={{ color: isDarkMode ? '#64748b' : '#94a3b8' }}>
+                  {fix.author_email?.split('@')[0]}
+                </p>
+              </div>
+            ))}
+            {userRole.canEdit && !isLocked && (
+              <input
+                type="text"
+                placeholder="Add a fix..."
+                className={`w-full px-3 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                    const fix = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), priority: 'medium' };
+                    setTables(prev => prev.map(x => x.id === t.id ? { ...x, fixes: [...((x as any).fixes || []), fix] } as any : x));
+                    (e.target as HTMLInputElement).value = '';
+                    push({ title: "Fix added", type: "success" });
+                  }
+                }}
+              />
+            )}
+          </div>
         </CollapsibleSection>
 
         {/* Color Picker */}
@@ -2689,7 +2890,7 @@ const selectedTableRelationships = useMemo(() => {
         </div>
       </div>
 
-      {/* Minimap */}
+      {/* Minimap with collapse support */}
       <Minimap
         tables={tables}
         viewport={viewport}
@@ -2697,6 +2898,7 @@ const selectedTableRelationships = useMemo(() => {
         canvasHeight={typeof window !== 'undefined' ? window.innerHeight - 60 : 800}
         onViewportChange={(x, y) => setViewport((prev) => ({ ...prev, x, y }))}
         isDarkMode={isDarkMode}
+        onCollapse={setIsMinimapCollapsed}
       />
 
       {/* Keyboard Shortcuts Overlay */}
