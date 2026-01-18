@@ -16,6 +16,7 @@ import {
   Shield,
   Sun,
   Moon,
+  AlertTriangle,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
@@ -23,6 +24,7 @@ import { DiagramPreview } from './DiagramPreview';
 import { TeamWorkspaceSwitcher } from './TeamWorkspaceSwitcher';
 import { supabase } from '../integrations/supabase/safeClient';
 import { useTheme } from './ThemeProvider';
+import { useUserRole } from '../hooks/useUserRole';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -56,6 +58,9 @@ export function DiagramSelector({
   const [isAdmin, setIsAdmin] = useState(false);
   const { isDarkMode, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  
+  // Get user role permissions
+  const { canEdit, canDelete } = useUserRole(teamId);
 
   useEffect(() => {
     // Check if user is admin
@@ -193,18 +198,20 @@ export function DiagramSelector({
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            {/* New Diagram Button */}
-            <button
-              onClick={onCreate}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 hover:scale-105"
-              style={{
-                background: 'hsl(239 84% 67%)',
-                color: 'hsl(0 0% 100%)',
-              }}
-            >
-              <Plus size={18} />
-              New Diagram
-            </button>
+            {/* New Diagram Button - hidden for readers/viewers */}
+            {canEdit && (
+              <button
+                onClick={onCreate}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 hover:scale-105"
+                style={{
+                  background: 'hsl(239 84% 67%)',
+                  color: 'hsl(0 0% 100%)',
+                }}
+              >
+                <Plus size={18} />
+                New Diagram
+              </button>
+            )}
 
             {/* Logout Button */}
             <button
@@ -276,7 +283,7 @@ export function DiagramSelector({
 
                   {/* Info */}
                   <div className="p-4">
-                    {editingDiagramId === diagram.id ? (
+                    {editingDiagramId === diagram.id && canEdit ? (
                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="text"
@@ -319,17 +326,20 @@ export function DiagramSelector({
                         <h3 className="font-semibold truncate flex-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                           {diagram.name}
                         </h3>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditName(diagram.name);
-                            setEditingDiagramId(diagram.id);
-                          }}
-                          className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
-                          title="Rename diagram"
-                        >
-                          <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
-                        </button>
+                        {/* Rename button - only show for users with edit permission */}
+                        {canEdit && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditName(diagram.name);
+                              setEditingDiagramId(diagram.id);
+                            }}
+                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
+                            title="Rename diagram"
+                          >
+                            <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+                          </button>
+                        )}
                       </div>
                     )}
                     
@@ -354,17 +364,19 @@ export function DiagramSelector({
                     </div>
                   </div>
 
-                  {/* Delete button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmId(diagram.id);
-                    }}
-                    className="absolute top-2 right-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    style={{ background: 'hsl(0 84% 60% / 0.1)' }}
-                  >
-                    <Trash2 size={16} style={{ color: 'hsl(0 84% 60%)' }} />
-                  </button>
+                  {/* Delete button - only show for users with delete permission */}
+                  {canDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmId(diagram.id);
+                      }}
+                      className="absolute top-2 right-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                      style={{ background: 'hsl(0 84% 60% / 0.1)' }}
+                    >
+                      <Trash2 size={16} style={{ color: 'hsl(0 84% 60%)' }} />
+                    </button>
+                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -372,7 +384,7 @@ export function DiagramSelector({
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal - Improved UI/UX */}
       <AnimatePresence>
         {deleteConfirmId && (
           <motion.div
@@ -380,26 +392,73 @@ export function DiagramSelector({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0, 0, 0, 0.7)' }}
+            style={{ background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(4px)' }}
             onClick={() => setDeleteConfirmId(null)}
           >
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              className="rounded-xl p-6 max-w-sm w-full border bg-card"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="rounded-2xl p-6 max-w-md w-full shadow-2xl"
+              style={{
+                background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+                border: `1px solid ${isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)'}`,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-semibold mb-2 text-foreground">
+              {/* Warning Icon */}
+              <div className="flex justify-center mb-4">
+                <div 
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{ background: 'hsl(0 84% 60% / 0.15)' }}
+                >
+                  <AlertTriangle size={32} style={{ color: 'hsl(0 84% 60%)' }} />
+                </div>
+              </div>
+
+              {/* Title */}
+              <h3 
+                className="text-xl font-bold text-center mb-2"
+                style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
+              >
                 Delete Diagram?
               </h3>
-              <p className="text-sm mb-6 text-muted-foreground">
-                This action cannot be undone. The diagram will be permanently deleted for all team members.
+
+              {/* Diagram name being deleted */}
+              <div 
+                className="text-center mb-4 px-4 py-2 rounded-lg"
+                style={{ 
+                  background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(220 14% 96%)',
+                }}
+              >
+                <span 
+                  className="font-medium text-sm"
+                  style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
+                >
+                  "{diagrams.find(d => d.id === deleteConfirmId)?.name || 'Untitled'}"
+                </span>
+              </div>
+
+              {/* Warning message */}
+              <p 
+                className="text-sm text-center mb-6"
+                style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
+              >
+                This action cannot be undone. The diagram and all its contents will be 
+                <span style={{ color: 'hsl(0 84% 60%)', fontWeight: 600 }}> permanently deleted </span>
+                for all team members.
               </p>
+
+              {/* Action buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={() => setDeleteConfirmId(null)}
-                  className="flex-1 py-2 rounded-lg font-medium text-sm bg-muted text-muted-foreground hover:bg-accent"
+                  className="flex-1 py-3 rounded-xl font-medium text-sm transition-all duration-200 hover:scale-[1.02]"
+                  style={{
+                    background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
+                    color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
+                  }}
                 >
                   Cancel
                 </button>
@@ -408,9 +467,14 @@ export function DiagramSelector({
                     onDelete(deleteConfirmId);
                     setDeleteConfirmId(null);
                   }}
-                  className="flex-1 py-2 rounded-lg font-medium text-sm bg-destructive text-destructive-foreground"
+                  className="flex-1 py-3 rounded-xl font-medium text-sm transition-all duration-200 hover:scale-[1.02] flex items-center justify-center gap-2"
+                  style={{
+                    background: 'hsl(0 84% 60%)',
+                    color: 'hsl(0 0% 100%)',
+                  }}
                 >
-                  Delete
+                  <Trash2 size={16} />
+                  Delete Diagram
                 </button>
               </div>
             </motion.div>
