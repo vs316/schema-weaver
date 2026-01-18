@@ -177,12 +177,17 @@ export function DiagramSelector({
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
+            {/* Logo */}
+            <img 
+              src="/logo.png" 
+              alt="ERD Studio" 
+              className="w-12 h-12 rounded-xl"
+            />
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-3 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
-                <Cloud size={28} style={{ color: 'hsl(239 84% 67%)' }} />
-                Your Diagrams
+              <h1 className="text-2xl font-bold flex items-center gap-2 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
+                ERD Studio
               </h1>
-              <p className="mt-1 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
+              <p className="text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                 Select a diagram to continue or create a new one
               </p>
             </div>
