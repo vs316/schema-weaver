@@ -9,7 +9,7 @@ interface DiagramTypeSelectorProps {
   isDarkMode: boolean;
 }
 
-const DIAGRAM_TYPES: { type: DiagramType; label: string; icon: React.ReactNode; description: string }[] = [
+const DIAGRAM_TYPES: { type: DiagramType; label: string; icon: React.ReactNode; description: string; disabled?: boolean }[] = [
   { 
     type: 'erd', 
     label: 'ERD', 
@@ -20,19 +20,22 @@ const DIAGRAM_TYPES: { type: DiagramType; label: string; icon: React.ReactNode; 
     type: 'uml-class', 
     label: 'UML Class', 
     icon: <BoxSelect size={16} />, 
-    description: 'UML Class Diagram' 
+    description: 'UML Class Diagram (Coming Soon)',
+    disabled: true,
   },
   { 
     type: 'flowchart', 
     label: 'Flowchart', 
     icon: <GitBranch size={16} />, 
-    description: 'Process Flowchart' 
+    description: 'Process Flowchart (Coming Soon)',
+    disabled: true,
   },
   { 
     type: 'sequence', 
     label: 'Sequence', 
     icon: <MessageSquare size={16} />, 
     description: 'Sequence Diagram (Coming Soon)',
+    disabled: true,
   },
 ];
 
@@ -49,9 +52,9 @@ export function DiagramTypeSelector({
         border: `1px solid ${isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)'}`,
       }}
     >
-      {DIAGRAM_TYPES.map(({ type, label, icon, description }) => {
+      {DIAGRAM_TYPES.map(({ type, label, icon, description, disabled }) => {
         const isActive = currentType === type;
-        const isDisabled = type === 'sequence';
+        const isDisabled = disabled === true;
         
         return (
           <motion.button
