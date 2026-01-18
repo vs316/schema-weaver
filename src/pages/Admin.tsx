@@ -29,8 +29,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
-
-const THEME_KEY = "erd-theme";
+import { useTheme } from '../components/ThemeProvider';
 
 type Tab = 'dashboard' | 'users' | 'diagrams' | 'teams' | 'admins';
 
@@ -105,26 +104,8 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAccessDenied, setShowAccessDenied] = useState(false);
   
-  // Theme state
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(THEME_KEY);
-      return stored !== "light";
-    }
-    return true;
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDarkMode) {
-      root.classList.remove("light");
-      root.classList.add("dark");
-    } else {
-      root.classList.add("light");
-      root.classList.remove("dark");
-    }
-    localStorage.setItem(THEME_KEY, isDarkMode ? "dark" : "light");
-  }, [isDarkMode]);
+  // Theme (global)
+  const { isDarkMode, toggleTheme } = useTheme();
 
   useEffect(() => {
     checkAdminAccess();
@@ -476,10 +457,8 @@ export default function AdminPage() {
 
             {/* Theme Toggle */}
             <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className={`p-2 rounded-lg transition-all ${
-                isDarkMode ? "hover:bg-white/5 text-slate-400" : "hover:bg-slate-200 text-slate-600"
-              }`}
+              onClick={toggleTheme}
+              className="p-2 rounded-lg transition-colors hover:bg-accent text-muted-foreground"
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}

@@ -22,8 +22,7 @@ import { TeamManagement } from './TeamManagement';
 import { DiagramPreview } from './DiagramPreview';
 import { TeamWorkspaceSwitcher } from './TeamWorkspaceSwitcher';
 import { supabase } from '../integrations/supabase/safeClient';
-
-const THEME_KEY = "erd-theme";
+import { useTheme } from './ThemeProvider';
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -55,26 +54,8 @@ export function DiagramSelector({
   const [editingDiagramId, setEditingDiagramId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(THEME_KEY);
-      return stored !== "light";
-    }
-    return true;
-  });
+  const { isDarkMode, toggleTheme } = useTheme();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDarkMode) {
-      root.classList.remove("light");
-      root.classList.add("dark");
-    } else {
-      root.classList.add("light");
-      root.classList.remove("dark");
-    }
-    localStorage.setItem(THEME_KEY, isDarkMode ? "dark" : "light");
-  }, [isDarkMode]);
 
   useEffect(() => {
     // Check if user is admin
@@ -109,27 +90,16 @@ export function DiagramSelector({
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'hsl(222 47% 4%)' }}>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
         <div className="text-center max-w-md">
-          <div 
-            className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
-            style={{ background: 'hsl(0 84% 60% / 0.1)' }}
-          >
-            <Cloud size={32} style={{ color: 'hsl(0 84% 60%)' }} />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-destructive/10">
+            <Cloud size={32} className="text-destructive" />
           </div>
-          <h2 className="text-lg font-semibold mb-2" style={{ color: 'hsl(210 40% 98%)' }}>
-            Something went wrong
-          </h2>
-          <p className="text-sm mb-4" style={{ color: 'hsl(215 20% 65%)' }}>
-            {error}
-          </p>
+          <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+          <p className="text-sm mb-4 text-muted-foreground">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 rounded-lg font-medium text-sm"
-            style={{
-              background: 'hsl(239 84% 67%)',
-              color: 'hsl(0 0% 100%)',
-            }}
+            className="px-4 py-2 rounded-lg font-medium text-sm bg-primary text-primary-foreground"
           >
             Try Again
           </button>
@@ -140,26 +110,26 @@ export function DiagramSelector({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'hsl(222 47% 4%)' }}>
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
         <div className="text-center">
-          <Loader2 size={40} className="animate-spin mx-auto mb-4" style={{ color: 'hsl(239 84% 67%)' }} />
-          <p style={{ color: 'hsl(215 20% 65%)' }}>Loading diagrams...</p>
+          <Loader2 size={40} className="animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Loading diagrams...</p>
         </div>
       </div>
     );
   }
 
+
   // Show team setup if no teamId
   if (!teamId) {
     return (
-      <div className="min-h-screen p-6 flex items-center justify-center" style={{ background: 'hsl(222 47% 4%)' }}>
+      <div className="min-h-screen p-6 flex items-center justify-center bg-background text-foreground">
         <div className="max-w-md w-full">
           <TeamManagement teamId={null} onTeamJoined={() => window.location.reload()} />
           <div className="mt-4 text-center">
             <button
               onClick={onLogout}
-              className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors hover:bg-red-500/10"
-              style={{ color: 'hsl(0 84% 60%)' }}
+              className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors hover:bg-destructive/10 text-destructive"
             >
               <LogOut size={14} />
               Sign Out
@@ -169,6 +139,7 @@ export function DiagramSelector({
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen p-6 transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(222 47% 4%)' : 'hsl(0 0% 96%)' }}>
@@ -215,10 +186,8 @@ export function DiagramSelector({
 
             {/* Theme Toggle */}
             <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className={`p-2.5 rounded-lg transition-all ${
-                isDarkMode ? "hover:bg-white/5 text-slate-400" : "hover:bg-slate-200 text-slate-600"
-              }`}
+              onClick={toggleTheme}
+              className="p-2.5 rounded-lg transition-colors hover:bg-accent text-muted-foreground"
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
