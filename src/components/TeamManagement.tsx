@@ -785,16 +785,16 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
                                         disabled={updatingRole === member.user_id}
                                         className="text-xs px-1.5 py-0.5 rounded border cursor-pointer min-w-[80px]"
                                         style={{
-                                          borderColor: 'hsl(217 33% 25%)',
-                                          backgroundColor: 'hsl(222 47% 11%)',
-                                          color: 'hsl(210 40% 98%)',
+                                          borderColor: 'hsl(var(--border))',
+                                          backgroundColor: 'hsl(var(--background))',
+                                          color: 'hsl(var(--foreground))',
                                         }}
                                       >
-                                        <option value="admin" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Admin</option>
-                                        <option value="member" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Member</option>
-                                        <option value="dev" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Dev</option>
-                                        <option value="reader" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Reader</option>
-                                        <option value="viewer" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Viewer</option>
+                                        <option value="admin" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>Admin</option>
+                                        <option value="member" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>Member</option>
+                                        <option value="dev" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>Dev</option>
+                                        <option value="reader" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>Reader</option>
+                                        <option value="viewer" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>Viewer</option>
                                       </select>
                                     ) : (
                                       <span className="text-xs" style={{ color: 'hsl(var(--muted-foreground))' }}>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
+import { useTheme } from './ThemeProvider';
 
 interface TeamMembership {
   team_id: string;
@@ -44,6 +45,7 @@ export function TeamWorkspaceSwitcher({
   const [teams, setTeams] = useState<TeamMembership[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
+  const { isDarkMode } = useTheme();
 
   useEffect(() => {
     fetchTeams();
@@ -155,11 +157,11 @@ export function TeamWorkspaceSwitcher({
   if (loading) {
     return (
       <div 
-        className="flex items-center gap-2 px-3 py-2 rounded-lg"
-        style={{ background: 'hsl(222 47% 8%)' }}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors duration-300"
+        style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)' }}
       >
-        <Loader2 size={14} className="animate-spin" style={{ color: 'hsl(215 20% 65%)' }} />
-        <span className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>Loading...</span>
+        <Loader2 size={14} className="animate-spin" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+        <span className="text-sm" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Loading...</span>
       </div>
     );
   }
@@ -174,8 +176,10 @@ export function TeamWorkspaceSwitcher({
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 border"
         style={{
-          background: 'hsl(222 47% 8%)',
-          borderColor: isOpen ? 'hsl(239 84% 67% / 0.5)' : 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+          borderColor: isOpen 
+            ? 'hsl(239 84% 67% / 0.5)' 
+            : isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
@@ -190,11 +194,17 @@ export function TeamWorkspaceSwitcher({
           {activeTeam?.team_name?.[0]?.toUpperCase() || 'T'}
         </div>
         <div className="text-left">
-          <div className="text-sm font-medium truncate max-w-[120px]" style={{ color: 'hsl(210 40% 98%)' }}>
+          <div 
+            className="text-sm font-medium truncate max-w-[120px]" 
+            style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
+          >
             {activeTeam?.team_name || 'Select Team'}
           </div>
           {activeTeam && (
-            <div className="flex items-center gap-1 text-[10px]" style={{ color: 'hsl(215 20% 65%)' }}>
+            <div 
+              className="flex items-center gap-1 text-[10px]" 
+              style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
+            >
               {ROLE_ICONS[activeTeam.role]}
               <span>{activeTeam.member_count} members</span>
             </div>
@@ -204,7 +214,7 @@ export function TeamWorkspaceSwitcher({
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.2 }}
         >
-          <ChevronDown size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+          <ChevronDown size={14} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
         </motion.div>
       </motion.button>
 
@@ -228,14 +238,14 @@ export function TeamWorkspaceSwitcher({
               transition={{ duration: 0.15, ease: 'easeOut' }}
               className="absolute top-full left-0 mt-2 w-64 rounded-lg border shadow-xl z-50 overflow-hidden"
               style={{
-                background: 'hsl(222 47% 6%)',
-                borderColor: 'hsl(217 33% 17%)',
+                background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+                borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
               }}
             >
               <div className="p-2">
                 <div 
                   className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1" 
-                  style={{ color: 'hsl(215 20% 65%)' }}
+                  style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
                 >
                   Your Workspaces
                 </div>
@@ -250,17 +260,23 @@ export function TeamWorkspaceSwitcher({
                       onClick={() => handleSwitch(team.team_id)}
                       disabled={switching !== null}
                       className={`w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors text-left ${
-                        team.is_active ? '' : 'hover:bg-white/5'
+                        team.is_active ? '' : isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-100'
                       }`}
                       style={{
-                        background: team.is_active ? 'hsl(239 84% 67% / 0.1)' : 'transparent',
+                        background: team.is_active 
+                          ? 'hsl(239 84% 67% / 0.1)' 
+                          : 'transparent',
                       }}
                     >
                       <div
                         className="w-8 h-8 rounded flex items-center justify-center text-sm font-bold shrink-0"
                         style={{
-                          background: team.is_active ? 'hsl(239 84% 67% / 0.2)' : 'hsl(222 47% 11%)',
-                          color: team.is_active ? 'hsl(239 84% 67%)' : 'hsl(215 20% 65%)',
+                          background: team.is_active 
+                            ? 'hsl(239 84% 67% / 0.2)' 
+                            : isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(220 14% 96%)',
+                          color: team.is_active 
+                            ? 'hsl(239 84% 67%)' 
+                            : isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)',
                         }}
                       >
                         {team.team_name[0]?.toUpperCase() || 'T'}
@@ -270,12 +286,15 @@ export function TeamWorkspaceSwitcher({
                           {team.role === 'owner' && <Crown size={10} className="text-amber-500 shrink-0" />}
                           <span 
                             className="text-sm font-medium truncate" 
-                            style={{ color: 'hsl(210 40% 98%)' }}
+                            style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
                           >
                             {team.team_name}
                           </span>
                         </div>
-                        <div className="text-[10px]" style={{ color: 'hsl(215 20% 65%)' }}>
+                        <div 
+                          className="text-[10px]" 
+                          style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
+                        >
                           {team.member_count} member{team.member_count !== 1 ? 's' : ''} • {team.role}
                         </div>
                       </div>
@@ -289,16 +308,24 @@ export function TeamWorkspaceSwitcher({
                 </div>
               </div>
 
-              <div className="border-t p-2" style={{ borderColor: 'hsl(217 33% 17%)' }}>
+              <div 
+                className="border-t p-2" 
+                style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
+              >
                 <button
                   onClick={() => {
                     setIsOpen(false);
                     onOpenSettings();
                   }}
-                  className="w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors hover:bg-white/5"
+                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors ${
+                    isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                  }`}
                 >
-                  <Settings size={14} style={{ color: 'hsl(215 20% 65%)' }} />
-                  <span className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                  <Settings size={14} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+                  <span 
+                    className="text-sm" 
+                    style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
+                  >
                     Manage Teams
                   </span>
                 </button>
