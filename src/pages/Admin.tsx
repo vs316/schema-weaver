@@ -23,11 +23,14 @@ import {
   Activity,
   Lock,
   Power,
-  
   UserCog,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
+
+const THEME_KEY = "erd-theme";
 
 type Tab = 'dashboard' | 'users' | 'diagrams' | 'teams' | 'admins';
 
@@ -101,6 +104,27 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [showAccessDenied, setShowAccessDenied] = useState(false);
+  
+  // Theme state
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(THEME_KEY);
+      return stored !== "light";
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.remove("light");
+      root.classList.add("dark");
+    } else {
+      root.classList.add("light");
+      root.classList.remove("dark");
+    }
+    localStorage.setItem(THEME_KEY, isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
 
   useEffect(() => {
     checkAdminAccess();
@@ -447,6 +471,17 @@ export default function AdminPage() {
               </div>
             )}
 
+            {/* Theme Toggle */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`p-2 rounded-lg transition-all ${
+                isDarkMode ? "hover:bg-white/5 text-slate-400" : "hover:bg-slate-200 text-slate-600"
+              }`}
+              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
             <button
               onClick={loadAllData}
               disabled={refreshing}
@@ -455,7 +490,7 @@ export default function AdminPage() {
               <RefreshCw 
                 size={18} 
                 className={refreshing ? 'animate-spin' : ''} 
-                style={{ color: 'hsl(215 20% 65%)' }} 
+                style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 20% 45%)' }} 
               />
             </button>
           </div>

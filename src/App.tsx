@@ -42,11 +42,10 @@ import {
 
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { ResizablePanel } from "./components/ResizablePanel";
+import { ColorPicker } from "./components/ColorPicker";
 import { useUserRole } from "./hooks/useUserRole";
 import { useRealTimeNotifications } from "./hooks/useRealTimeNotifications";
 import { RealTimeNotification } from "./components/RealTimeNotification";
-// TableSidebarSections is available but currently table-specific sections are inline
-// import { TableSidebarSections } from "./components/TableSidebarSections";
 
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
@@ -2444,85 +2443,24 @@ const selectedTableRelationships = useMemo(() => {
 
         {/* Color Picker - Only editable by users with canEdit permission */}
         {userRole.canEdit && (
-          <div className="space-y-2">
-            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-              Color
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Current color display */}
-              <div
-                className="w-8 h-8 rounded-lg border-2 shadow-inner"
-                style={{ 
-                  background: t.color || "#64748b",
-                  borderColor: isDarkMode ? '#475569' : '#cbd5e1'
-                }}
-                title="Current color"
-              />
-              {/* Preset colors */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444", "#ec4899", "#06b6d4"].map((c) => (
-                  <button
-                    key={c}
-                    className={`w-6 h-6 rounded-md border hover:scale-110 transition-all shadow-sm ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""} ${t.color === c ? "ring-2 ring-offset-1 ring-indigo-500" : ""}`}
-                    style={{ 
-                      background: c,
-                      borderColor: isDarkMode ? '#334155' : '#e2e8f0'
-                    }}
-                    onClick={() => {
-                      if (!isLocked && userRole.canEdit) {
-                        setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
-                        pushHistory();
-                      }
-                    }}
-                    disabled={isLocked || !userRole.canEdit}
-                    title={`Set color ${c}`}
-                  />
-                ))}
-              </div>
-            </div>
-            {/* Custom color picker with opacity */}
-            <div className="flex items-center gap-2 mt-2">
-              <input
-                type="color"
-                value={t.color || "#64748b"}
-                onChange={(e) => {
-                  if (!isLocked && userRole.canEdit) {
-                    setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: e.target.value } : x)));
-                  }
-                }}
-                onBlur={() => pushHistory()}
-                disabled={isLocked || !userRole.canEdit}
-                className={`w-8 h-8 rounded cursor-pointer border-0 ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
-                style={{ padding: 0 }}
-                title="Pick custom color"
-              />
-              <input
-                type="text"
-                value={t.color || "#64748b"}
-                onChange={(e) => {
-                  if (!isLocked && userRole.canEdit) {
-                    const value = e.target.value;
-                    // Allow hex, rgb, rgba formats
-                    if (/^#[0-9A-Fa-f]{0,8}$/.test(value) || /^rgba?\(/.test(value)) {
-                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: value } : x)));
-                    }
-                  }
-                }}
-                onBlur={() => pushHistory()}
-                disabled={isLocked || !userRole.canEdit}
-                placeholder="#hex or rgba(r,g,b,a)"
-                className={`flex-1 px-2 py-1 rounded text-xs font-mono border outline-none transition-all ${
-                  isDarkMode 
-                    ? "bg-slate-950 border-slate-700 text-slate-300 focus:border-indigo-500" 
-                    : "bg-white border-slate-300 text-slate-700 focus:border-indigo-400"
-                } ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
-              />
-              <Palette size={14} className="opacity-40 flex-shrink-0" />
-            </div>
-            <p className={`text-[9px] ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-              Supports hex (#rrggbb), rgba(r,g,b,a) for opacity
-            </p>
-          </div>
+          <CollapsibleSection
+            title="Table Color"
+            icon={<Palette size={14} />}
+            defaultOpen={true}
+            isDarkMode={isDarkMode}
+          >
+            <ColorPicker
+              color={t.color || "#64748b"}
+              onChange={(newColor) => {
+                if (!isLocked && userRole.canEdit) {
+                  setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: newColor } : x)));
+                }
+              }}
+              onBlur={() => pushHistory()}
+              disabled={isLocked || !userRole.canEdit}
+              isDarkMode={isDarkMode}
+            />
+          </CollapsibleSection>
         )}
 
         {/* Columns - Only editable by users with canEdit permission */}
@@ -3098,7 +3036,7 @@ const selectedTableRelationships = useMemo(() => {
                               ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
                               : "bg-slate-50 border-slate-300 text-slate-900 focus:border-indigo-400"
                           } ${(effectiveIsLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
-                          rows={4}
+                          rows={3}
                           placeholder="Add notes about this table..."
                           value={t.description || ""}
                           onChange={(e) => userRole.canEdit && !effectiveIsLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
@@ -3107,106 +3045,242 @@ const selectedTableRelationships = useMemo(() => {
                         />
                       </div>
 
-                      {/* Color */}
-                      {userRole.canEdit && (
-                        <div className="space-y-2">
-                          <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                            Color
-                          </label>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <div
-                              className="w-10 h-10 rounded-lg border-2 shadow-inner"
-                              style={{ 
-                                background: t.color || "#64748b",
-                                borderColor: isDarkMode ? '#475569' : '#cbd5e1'
-                              }}
-                            />
-                            {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444", "#ec4899", "#06b6d4"].map((c) => (
-                              <button
-                                key={c}
-                                className={`w-8 h-8 rounded-lg border hover:scale-110 transition-all shadow-sm ${t.color === c ? "ring-2 ring-offset-2 ring-indigo-500" : ""}`}
-                                style={{ 
-                                  background: c,
-                                  borderColor: isDarkMode ? '#334155' : '#e2e8f0'
-                                }}
-                                onClick={() => {
-                                  if (!effectiveIsLocked && userRole.canEdit) {
-                                    setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
-                                    pushHistory();
-                                  }
-                                }}
-                                disabled={effectiveIsLocked || !userRole.canEdit}
-                              />
-                            ))}
-                            <input
-                              type="color"
-                              value={t.color || "#64748b"}
-                              onChange={(e) => {
+                      {/* Two Column Layout for Color and Columns */}
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Color */}
+                        {userRole.canEdit && (
+                          <div className="space-y-2">
+                            <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                              Color
+                            </label>
+                            <ColorPicker
+                              color={t.color || "#64748b"}
+                              onChange={(newColor) => {
                                 if (!effectiveIsLocked && userRole.canEdit) {
-                                  setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: e.target.value } : x)));
+                                  setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: newColor } : x)));
                                 }
                               }}
                               onBlur={() => pushHistory()}
                               disabled={effectiveIsLocked || !userRole.canEdit}
-                              className="w-10 h-10 rounded cursor-pointer border-0"
-                              title="Pick custom color"
+                              isDarkMode={isDarkMode}
                             />
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Columns in 2-column grid */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                            Columns ({t.columns.length})
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          {t.columns.map((col) => (
-                            <div
-                              key={col.id}
-                              className={`p-3 rounded-xl border ${
-                                isDarkMode ? "bg-slate-950 border-slate-700" : "bg-slate-50 border-slate-200"
-                              }`}
-                            >
-                              <div className={`font-bold text-sm mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                                {col.name}
-                              </div>
-                              <div className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
-                                {col.type} {col.isPk && "• PK"} {col.isFk && "• FK"}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Comments summary */}
-                      <div className="space-y-2">
-                        <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                          Comments ({selectedTableComments.length})
-                        </label>
-                        {selectedTableComments.length > 0 ? (
-                          <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {selectedTableComments.map((comment: TableComment) => (
+                        {/* Columns */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                              Columns ({t.columns.length})
+                            </label>
+                          </div>
+                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {t.columns.map((col) => (
                               <div
-                                key={comment.id}
-                                className={`p-3 rounded-lg border ${
-                                  isDarkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                                key={col.id}
+                                className={`p-2 rounded-lg border ${
+                                  isDarkMode ? "bg-slate-950 border-slate-700" : "bg-slate-50 border-slate-200"
                                 }`}
                               >
-                                <div className={`text-xs font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
-                                  {comment.author_email?.split('@')[0] || 'User'}
+                                <div className={`font-bold text-xs ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                                  {col.name}
                                 </div>
-                                <div className={`text-sm my-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                                  {comment.content}
+                                <div className={`text-[10px] ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
+                                  {col.type} {col.isPk && "• PK"} {col.isFk && "• FK"}
                                 </div>
                               </div>
                             ))}
                           </div>
-                        ) : (
-                          <div className={`text-sm ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No comments yet</div>
-                        )}
+                        </div>
+                      </div>
+
+                      {/* Metadata Sections Grid */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Comments */}
+                        <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <MessageSquare size={14} className="text-indigo-500" />
+                            <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                              Comments ({selectedTableComments.length})
+                            </label>
+                          </div>
+                          {selectedTableComments.length > 0 ? (
+                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {selectedTableComments.slice(0, 3).map((comment: TableComment) => (
+                                <div key={comment.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+                                  <span className="font-bold text-indigo-400">{comment.author_email?.split('@')[0]}:</span> {comment.content}
+                                </div>
+                              ))}
+                              {selectedTableComments.length > 3 && (
+                                <div className={`text-[10px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>+{selectedTableComments.length - 3} more</div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No comments</div>
+                          )}
+                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                            <input
+                              type="text"
+                              placeholder="Add comment..."
+                              className={`w-full mt-2 px-2 py-1.5 rounded text-xs border outline-none ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
+                              }`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                                  handleAddComment((e.target as HTMLInputElement).value);
+                                  (e.target as HTMLInputElement).value = '';
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        {/* Notes */}
+                        <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <StickyNote size={14} className="text-amber-500" />
+                            <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                              Notes ({((t as any).notes || []).length})
+                            </label>
+                          </div>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {((t as any).notes || []).slice(0, 3).map((note: any) => (
+                              <div key={note.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+                                {note.content}
+                              </div>
+                            ))}
+                            {((t as any).notes || []).length === 0 && (
+                              <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No notes</div>
+                            )}
+                          </div>
+                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                            <input
+                              type="text"
+                              placeholder="Add note..."
+                              className={`w-full mt-2 px-2 py-1.5 rounded text-xs border outline-none ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
+                              }`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                                  const note = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString() };
+                                  setTables(prev => prev.map(x => x.id === t.id ? { ...x, notes: [...((x as any).notes || []), note] } as any : x));
+                                  (e.target as HTMLInputElement).value = '';
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        {/* Questions */}
+                        <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <HelpCircle size={14} className="text-cyan-500" />
+                            <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                              Questions ({((t as any).questions || []).length})
+                            </label>
+                          </div>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {((t as any).questions || []).slice(0, 3).map((q: any) => (
+                              <div key={q.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+                                {q.content}
+                              </div>
+                            ))}
+                            {((t as any).questions || []).length === 0 && (
+                              <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No questions</div>
+                            )}
+                          </div>
+                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                            <input
+                              type="text"
+                              placeholder="Add question..."
+                              className={`w-full mt-2 px-2 py-1.5 rounded text-xs border outline-none ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
+                              }`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                                  const question = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString() };
+                                  setTables(prev => prev.map(x => x.id === t.id ? { ...x, questions: [...((x as any).questions || []), question] } as any : x));
+                                  (e.target as HTMLInputElement).value = '';
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        {/* Fixes */}
+                        <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Wrench size={14} className="text-emerald-500" />
+                            <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                              Fixes ({((t as any).fixes || []).length})
+                            </label>
+                          </div>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {((t as any).fixes || []).slice(0, 3).map((fix: any) => (
+                              <div key={fix.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+                                <span className={`px-1 py-0.5 rounded text-[9px] font-bold mr-1 ${
+                                  fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+                                }`}>{fix.priority || 'medium'}</span>
+                                {fix.content}
+                              </div>
+                            ))}
+                            {((t as any).fixes || []).length === 0 && (
+                              <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No fixes</div>
+                            )}
+                          </div>
+                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                            <input
+                              type="text"
+                              placeholder="Add fix..."
+                              className={`w-full mt-2 px-2 py-1.5 rounded text-xs border outline-none ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
+                              }`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                                  const fix = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), priority: 'medium' };
+                                  setTables(prev => prev.map(x => x.id === t.id ? { ...x, fixes: [...((x as any).fixes || []), fix] } as any : x));
+                                  (e.target as HTMLInputElement).value = '';
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Relationships */}
+                      <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <LinkIcon size={14} className="text-indigo-500" />
+                          <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                            Relationships ({relations.filter(r => r.sourceTableId === t.id || r.targetTableId === t.id).length})
+                          </label>
+                        </div>
+                        <div className="space-y-2">
+                          {relations.filter(r => r.sourceTableId === t.id || r.targetTableId === t.id).map((rel) => {
+                            const isSource = rel.sourceTableId === t.id;
+                            const otherTable = tables.find(x => x.id === (isSource ? rel.targetTableId : rel.sourceTableId));
+                            return (
+                              <div key={rel.id} className={`flex items-center justify-between p-2 rounded-lg ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-mono ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                                    {isSource ? "→" : "←"} {otherTable?.name || "Unknown"}
+                                  </span>
+                                  {rel.label && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-200 text-slate-600"}`}>
+                                      {rel.label}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-[9px] uppercase ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+                                  {rel.lineType} {rel.isDashed && "• dashed"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {relations.filter(r => r.sourceTableId === t.id || r.targetTableId === t.id).length === 0 && (
+                            <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No relationships</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
