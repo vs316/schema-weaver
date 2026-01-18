@@ -39,9 +39,16 @@ const DIAGRAM_TYPES: { type: DiagramType; label: string; icon: React.ReactNode; 
 export function DiagramTypeSelector({
   currentType,
   onTypeChange,
+  isDarkMode,
 }: DiagramTypeSelectorProps) {
   return (
-    <div className="flex items-center gap-1 p-1 rounded-lg" style={{ background: 'hsl(var(--muted))' }}>
+    <div 
+      className="flex items-center gap-1 p-1 rounded-lg transition-colors"
+      style={{ 
+        background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(220 14% 96%)',
+        border: `1px solid ${isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)'}`,
+      }}
+    >
       {DIAGRAM_TYPES.map(({ type, label, icon, description }) => {
         const isActive = currentType === type;
         const isDisabled = type === 'sequence';
@@ -55,10 +62,18 @@ export function DiagramTypeSelector({
               isDisabled ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             style={{
-              background: isActive ? 'hsl(var(--primary))' : 'transparent',
-              color: isActive ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
+              background: isActive 
+                ? 'hsl(239 84% 67%)' 
+                : 'transparent',
+              color: isActive 
+                ? 'white' 
+                : isDarkMode 
+                  ? 'hsl(215 20% 65%)' 
+                  : 'hsl(215 16% 47%)',
             }}
-            whileHover={!isDisabled ? { scale: 1.02 } : undefined}
+            whileHover={!isDisabled && !isActive ? { 
+              backgroundColor: isDarkMode ? 'hsl(222 47% 15%)' : 'hsl(220 14% 90%)' 
+            } : undefined}
             whileTap={!isDisabled ? { scale: 0.98 } : undefined}
             title={description}
           >
