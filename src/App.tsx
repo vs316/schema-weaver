@@ -2579,7 +2579,12 @@ const selectedTableRelationships = useMemo(() => {
                   </label>
 
                   <select
-                    className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"} ${(isLocked || !userRole.canEdit) ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`text-[10px] outline-none ml-auto transition-colors duration-200 rounded px-1 py-0.5 ${(isLocked || !userRole.canEdit) ? "opacity-50 cursor-not-allowed" : ""}`}
+                    style={{
+                      background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)',
+                      color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(222 47% 11%)',
+                      border: `1px solid ${isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)'}`,
+                    }}
                     value={col.type}
                     onChange={(e) =>
                       userRole.canEdit && !isLocked && setTables((prev) =>
@@ -2593,11 +2598,11 @@ const selectedTableRelationships = useMemo(() => {
                     disabled={isLocked || !userRole.canEdit}
                     onMouseUp={() => pushHistory()}
                   >
-                    <option>INT</option>
-                    <option>UUID</option>
-                    <option>VARCHAR</option>
-                    <option>TEXT</option>
-                    <option>BOOL</option>
+                    <option style={{ background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(222 47% 11%)' }}>INT</option>
+                    <option style={{ background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(222 47% 11%)' }}>UUID</option>
+                    <option style={{ background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(222 47% 11%)' }}>VARCHAR</option>
+                    <option style={{ background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(222 47% 11%)' }}>TEXT</option>
+                    <option style={{ background: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(222 47% 11%)' }}>BOOL</option>
                   </select>
                 </div>
               )}
