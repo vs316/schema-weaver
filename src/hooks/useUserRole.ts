@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../integrations/supabase/safeClient';
 
-export type UserRole = 'owner' | 'admin' | 'member' | 'dev' | 'reader';
+export type UserRole = 'owner' | 'admin' | 'member' | 'dev' | 'reader' | 'viewer';
 
 export function useUserRole(teamId: string | null) {
   const [role, setRole] = useState<UserRole | null>(null);
@@ -41,7 +41,10 @@ export function useUserRole(teamId: string | null) {
     fetchRole();
   }, [fetchRole]);
 
-  const canEdit = role !== null && role !== 'reader';
+  // reader and viewer can ONLY add notes/questions/changes/fixes/comments - no table/column edits
+  const canEdit = role !== null && !['reader', 'viewer'].includes(role);
+  // canAddMetadata - for readers who can add notes, questions, changes, fixes, comments
+  const canAddMetadata = role !== null && role !== 'viewer';
   const canManage = role !== null && ['owner', 'admin', 'member'].includes(role);
   const canDelete = role !== null && ['owner', 'admin'].includes(role);
   const isOwner = role === 'owner';
@@ -50,6 +53,7 @@ export function useUserRole(teamId: string | null) {
     role,
     loading,
     canEdit,
+    canAddMetadata,
     canManage,
     canDelete,
     isOwner,

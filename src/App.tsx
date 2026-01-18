@@ -1136,7 +1136,7 @@ const selectedTableRelationships = useMemo(() => {
         // Clean shadow (subtle, not the debug gray lines)
         const shadow = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         shadow.setAttribute("x", (t.x - minX + padding + 3).toString());
-        shadow.setAttribute("y", (t.y - minX + padding + 3).toString());
+        shadow.setAttribute("y", (t.y - minY + padding + 3).toString());
         shadow.setAttribute("width", TABLE_W.toString());
         shadow.setAttribute("height", tableHeight.toString());
         shadow.setAttribute("fill", isDarkMode ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.08)");
@@ -2124,7 +2124,7 @@ const selectedTableRelationships = useMemo(() => {
                 const t = tables.find((x) => x.id === selectedTableId)!;
                 return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-        {/* Table Name */}
+        {/* Table Name - only editable by users with canEdit permission */}
         <div className="space-y-2">
           <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
             Table name
@@ -2134,11 +2134,11 @@ const selectedTableRelationships = useMemo(() => {
               isDarkMode
                 ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
                 : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
-            } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            } ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
             value={t.name}
-            onChange={(e) => !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))}
+            onChange={(e) => userRole.canEdit && !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))}
             onBlur={() => pushHistory()}
-            disabled={isLocked}
+            disabled={isLocked || !userRole.canEdit}
           />
         </div>
 
@@ -2154,17 +2154,97 @@ const selectedTableRelationships = useMemo(() => {
               isDarkMode
                 ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
                 : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
-            } ${(isLocked && !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+            } ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
             rows={3}
             placeholder="Add notes about this table..."
             value={t.description || ""}
             onChange={(e) => userRole.canEdit && !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
             onBlur={() => pushHistory()}
-            disabled={isLocked && !userRole.canEdit}
+            disabled={isLocked || !userRole.canEdit}
           />
           {t.description && (
             <div className={`text-[9px] opacity-75 mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
               {t.description.length} characters
+            </div>
+          )}
+        </CollapsibleSection>
+
+        {/* Comments Collapsible Section - Moved under description, readers can add comments */}
+        <CollapsibleSection
+          title="Comments"
+          icon={<MessageSquare size={14} />}
+          badge={selectedTableComments.length || undefined}
+          defaultOpen={selectedTableComments.length > 0}
+          isDarkMode={isDarkMode}
+        >
+          {/* Add comment form - Anyone with canAddMetadata can add comments */}
+          {userRole.canAddMetadata && !isLocked && (
+            <div className="mb-3 space-y-2">
+              <textarea
+                className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
+                  isDarkMode
+                    ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
+                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
+                }`}
+                rows={2}
+                placeholder="Add a comment..."
+                value={newCommentText}
+                onChange={(e) => setNewCommentText(e.target.value)}
+              />
+              <button
+                onClick={() => {
+                  if (newCommentText.trim()) {
+                    handleAddComment(newCommentText);
+                    setNewCommentText("");
+                    push({ title: "Comment added", type: "success" });
+                  }
+                }}
+                disabled={!newCommentText.trim()}
+                className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                Post Comment
+              </button>
+            </div>
+          )}
+
+          {/* Comments list */}
+          {selectedTableComments.length === 0 ? (
+            <div className={`text-xs text-center py-2 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+              No comments yet
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {selectedTableComments.map((comment: TableComment) => (
+                <div
+                  key={comment.id}
+                  className={`p-2 rounded-lg border transition-all duration-200 ${
+                    isDarkMode ? "bg-slate-950/50 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                        {comment.author_email?.split('@')[0] || 'User'}
+                      </div>
+                      <div className={`text-xs my-1 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                        {comment.content}
+                      </div>
+                      <div className={`text-[8px] ${isDarkMode ? "text-slate-600" : "text-slate-500"}`}>
+                        {new Date(comment.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                    {comment.author_id === user.id && (
+                      <button
+                        onClick={() => handleDeleteComment(comment.id)}
+                        className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
+                        title="Delete comment"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CollapsibleSection>
@@ -2185,7 +2265,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canEdit && !isLocked && (
+            {userRole.canAddMetadata && !isLocked && (
               <input
                 type="text"
                 placeholder="Add a note..."
@@ -2219,7 +2299,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canEdit && !isLocked && (
+            {userRole.canAddMetadata && !isLocked && (
               <input
                 type="text"
                 placeholder="Ask a question..."
@@ -2253,7 +2333,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canEdit && !isLocked && (
+            {userRole.canAddMetadata && !isLocked && (
               <input
                 type="text"
                 placeholder="Log a change..."
@@ -2292,7 +2372,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canEdit && !isLocked && (
+            {userRole.canAddMetadata && !isLocked && (
               <input
                 type="text"
                 placeholder="Add a fix..."
@@ -2310,68 +2390,72 @@ const selectedTableRelationships = useMemo(() => {
           </div>
         </CollapsibleSection>
 
-        {/* Color Picker */}
-        <div className="space-y-2">
-          <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Color
-          </label>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded-md border cursor-pointer"
-              style={{ background: t.color || "#64748b" }}
-              title="Current color"
-            />
+        {/* Color Picker - Only editable by users with canEdit permission */}
+        {userRole.canEdit && (
+          <div className="space-y-2">
+            <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              Color
+            </label>
             <div className="flex items-center gap-2">
-              {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444"].map((c) => (
-                <button
-                  key={c}
-                  className={`w-6 h-6 rounded-md border hover:scale-105 transition-transform ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-                  style={{ background: c }}
-                  onClick={() => {
-                    if (!isLocked) {
-                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
-                      pushHistory();
-                    }
-                  }}
-                  disabled={isLocked}
-                  title="Set color"
-                />
-              ))}
+              <div
+                className="w-6 h-6 rounded-md border cursor-pointer"
+                style={{ background: t.color || "#64748b" }}
+                title="Current color"
+              />
+              <div className="flex items-center gap-2">
+                {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444"].map((c) => (
+                  <button
+                    key={c}
+                    className={`w-6 h-6 rounded-md border hover:scale-105 transition-transform ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+                    style={{ background: c }}
+                    onClick={() => {
+                      if (!isLocked && userRole.canEdit) {
+                        setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
+                        pushHistory();
+                      }
+                    }}
+                    disabled={isLocked || !userRole.canEdit}
+                    title="Set color"
+                  />
+                ))}
+              </div>
+              <Palette size={14} className="opacity-40" />
             </div>
-            <Palette size={14} className="opacity-40" />
           </div>
-        </div>
+        )}
 
-        {/* Columns */}
+        {/* Columns - Only editable by users with canEdit permission */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
               Columns
             </label>
-            <button
-              onClick={() => {
-                if (!isLocked) {
-                  setTables((prev) =>
-                    prev.map((x) =>
-                      x.id === t.id
-                        ? {
-                            ...x,
-                            columns: [
-                              ...x.columns,
-                              { id: generateId(), name: "new_col", type: "VARCHAR", isPk: false, isFk: false },
-                            ],
-                          }
-                        : x
-                    )
-                  );
-                }
-              }}
-              disabled={isLocked}
-              className={`text-indigo-500 text-[10px] font-bold hover:underline hover:text-indigo-600 transition-colors duration-200 ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
-              onMouseUp={() => pushHistory()}
-            >
-              + Add column
-            </button>
+            {userRole.canEdit && (
+              <button
+                onClick={() => {
+                  if (!isLocked && userRole.canEdit) {
+                    setTables((prev) =>
+                      prev.map((x) =>
+                        x.id === t.id
+                          ? {
+                              ...x,
+                              columns: [
+                                ...x.columns,
+                                { id: generateId(), name: "new_col", type: "VARCHAR", isPk: false, isFk: false },
+                              ],
+                            }
+                          : x
+                      )
+                    );
+                  }
+                }}
+                disabled={isLocked || !userRole.canEdit}
+                className={`text-indigo-500 text-[10px] font-bold hover:underline hover:text-indigo-600 transition-colors duration-200 ${(isLocked || !userRole.canEdit) ? "opacity-50 cursor-not-allowed" : ""}`}
+                onMouseUp={() => pushHistory()}
+              >
+                + Add column
+              </button>
+            )}
           </div>
 
           {t.columns.map((col) => (
@@ -2379,16 +2463,16 @@ const selectedTableRelationships = useMemo(() => {
               key={col.id}
               className={`p-3 rounded-xl border space-y-2 transition-all duration-200 ${
                 isDarkMode ? "bg-slate-950 border-slate-700 hover:bg-slate-900 hover:border-slate-600" : "bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-300"
-              } ${isLocked ? "opacity-60" : ""}`}
+              } ${(isLocked || !userRole.canEdit) ? "opacity-60" : ""}`}
             >
               <div className="flex gap-2">
                 <input
                   className={`bg-transparent text-xs w-full outline-none font-bold transition-colors duration-200 ${
                     isDarkMode ? "text-slate-100" : "text-slate-900"
-                  } ${isLocked ? "cursor-not-allowed" : ""}`}
+                  } ${(isLocked || !userRole.canEdit) ? "cursor-not-allowed" : ""}`}
                   value={col.name}
                   onChange={(e) =>
-                    !isLocked && setTables((prev) =>
+                    userRole.canEdit && !isLocked && setTables((prev) =>
                       prev.map((x) =>
                         x.id === t.id
                           ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, name: e.target.value } : c)) }
@@ -2397,83 +2481,87 @@ const selectedTableRelationships = useMemo(() => {
                     )
                   }
                   onBlur={() => pushHistory()}
-                  disabled={isLocked}
+                  disabled={isLocked || !userRole.canEdit}
                 />
-                <button
-                  className={`transition-colors duration-200 ${isDarkMode ? "text-slate-500 hover:text-red-500" : "text-slate-600 hover:text-red-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
-                  onClick={() => {
-                    if (!isLocked) {
-                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, columns: x.columns.filter((c) => c.id !== col.id) } : x)));
-                    }
-                  }}
-                  disabled={isLocked}
-                  onMouseUp={() => pushHistory()}
-                >
-                  <X size={14} />
-                </button>
+                {userRole.canEdit && (
+                  <button
+                    className={`transition-colors duration-200 ${isDarkMode ? "text-slate-500 hover:text-red-500" : "text-slate-600 hover:text-red-600"} ${(isLocked || !userRole.canEdit) ? "opacity-50 cursor-not-allowed" : ""}`}
+                    onClick={() => {
+                      if (!isLocked && userRole.canEdit) {
+                        setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, columns: x.columns.filter((c) => c.id !== col.id) } : x)));
+                      }
+                    }}
+                    disabled={isLocked || !userRole.canEdit}
+                    onMouseUp={() => pushHistory()}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
 
-              <div className="flex gap-3">
-                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={col.isPk}
+              {userRole.canEdit && (
+                <div className="flex gap-3">
+                  <label className="flex items-center text-[10px] gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={col.isPk}
+                      onChange={(e) =>
+                        userRole.canEdit && !isLocked && setTables((prev) =>
+                          prev.map((x) =>
+                            x.id === t.id
+                              ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
+                              : x
+                          )
+                        )
+                      }
+                      disabled={isLocked || !userRole.canEdit}
+                      onMouseUp={() => pushHistory()}
+                    />{" "}
+                    PK
+                  </label>
+
+                  <label className="flex items-center text-[10px] gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={col.isFk}
+                      onChange={(e) =>
+                        userRole.canEdit && !isLocked && setTables((prev) =>
+                          prev.map((x) =>
+                            x.id === t.id
+                              ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: e.target.checked } : c)) }
+                              : x
+                          )
+                        )
+                      }
+                      disabled={isLocked || !userRole.canEdit}
+                      onMouseUp={() => pushHistory()}
+                    />{" "}
+                    FK
+                  </label>
+
+                  <select
+                    className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"} ${(isLocked || !userRole.canEdit) ? "opacity-50 cursor-not-allowed" : ""}`}
+                    value={col.type}
                     onChange={(e) =>
-                      !isLocked && setTables((prev) =>
+                      userRole.canEdit && !isLocked && setTables((prev) =>
                         prev.map((x) =>
                           x.id === t.id
-                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isPk: e.target.checked } : c)) }
+                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, type: e.target.value } : c)) }
                             : x
                         )
                       )
                     }
-                    disabled={isLocked}
+                    disabled={isLocked || !userRole.canEdit}
                     onMouseUp={() => pushHistory()}
-                  />{" "}
-                  PK
-                </label>
-
-                <label className="flex items-center text-[10px] gap-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={col.isFk}
-                    onChange={(e) =>
-                      !isLocked && setTables((prev) =>
-                        prev.map((x) =>
-                          x.id === t.id
-                            ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, isFk: e.target.checked } : c)) }
-                            : x
-                        )
-                      )
-                    }
-                    disabled={isLocked}
-                    onMouseUp={() => pushHistory()}
-                  />{" "}
-                  FK
-                </label>
-
-                <select
-                  className={`bg-transparent text-[10px] outline-none ml-auto transition-colors duration-200 ${isDarkMode ? "text-slate-500" : "text-slate-600"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
-                  value={col.type}
-                  onChange={(e) =>
-                    !isLocked && setTables((prev) =>
-                      prev.map((x) =>
-                        x.id === t.id
-                          ? { ...x, columns: x.columns.map((c) => (c.id === col.id ? { ...c, type: e.target.value } : c)) }
-                          : x
-                      )
-                    )
-                  }
-                  disabled={isLocked}
-                  onMouseUp={() => pushHistory()}
-                >
-                  <option>INT</option>
-                  <option>UUID</option>
-                  <option>VARCHAR</option>
-                  <option>TEXT</option>
-                  <option>BOOL</option>
-                </select>
-              </div>
+                  >
+                    <option>INT</option>
+                    <option>UUID</option>
+                    <option>VARCHAR</option>
+                    <option>TEXT</option>
+                    <option>BOOL</option>
+                  </select>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -2571,83 +2659,7 @@ const selectedTableRelationships = useMemo(() => {
           </div>
         </div>
 
-        {/* Comments Collapsible Section */}
-        <CollapsibleSection
-          title="Comments"
-          icon={<MessageSquare size={14} />}
-          badge={selectedTableComments.length || undefined}
-          defaultOpen={selectedTableComments.length > 0}
-          isDarkMode={isDarkMode}
-        >
-          {/* Add comment form - Readers can add comments */}
-          <div className="mb-3 space-y-2">
-            <textarea
-              className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
-                isDarkMode
-                  ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
-                  : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400"
-              }`}
-              rows={2}
-              placeholder="Add a comment..."
-              value={newCommentText}
-              onChange={(e) => setNewCommentText(e.target.value)}
-            />
-            <button
-              onClick={() => {
-                if (newCommentText.trim()) {
-                  handleAddComment(newCommentText);
-                  setNewCommentText("");
-                  push({ title: "Comment added", type: "success" });
-                }
-              }}
-              disabled={!newCommentText.trim()}
-              className="w-full py-1.5 bg-indigo-500/10 text-indigo-500 text-xs font-bold rounded-lg hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-            >
-              Post Comment
-            </button>
-          </div>
-
-          {/* Comments list */}
-          {selectedTableComments.length === 0 ? (
-            <div className={`text-xs text-center py-2 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-              No comments yet
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {selectedTableComments.map((comment: TableComment) => (
-                <div
-                  key={comment.id}
-                  className={`p-2 rounded-lg border transition-all duration-200 ${
-                    isDarkMode ? "bg-slate-950/50 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[10px] font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
-                        {comment.author_email?.split('@')[0] || 'User'}
-                      </div>
-                      <div className={`text-xs my-1 leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                        {comment.content}
-                      </div>
-                      <div className={`text-[8px] ${isDarkMode ? "text-slate-600" : "text-slate-500"}`}>
-                        {new Date(comment.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    {comment.author_id === user.id && (
-                      <button
-                        onClick={() => handleDeleteComment(comment.id)}
-                        className={`p-1 rounded transition-all flex-shrink-0 ${isDarkMode ? "hover:bg-red-900/20 text-red-500" : "hover:bg-red-100 text-red-600"}`}
-                        title="Delete comment"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CollapsibleSection>
+        {/* Feature 5: Sample Data - (Comments section moved under Description) */}
 
         {/* Feature 5: Sample Data */}
         <div className={`pt-4 border-t transition-colors duration-300 ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
