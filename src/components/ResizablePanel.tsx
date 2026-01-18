@@ -81,7 +81,7 @@ export function ResizablePanel({
   return (
     <div
       ref={panelRef}
-      className={`relative flex ${className}`}
+      className={`relative flex flex-col ${className}`}
       style={{ 
         width: `${width}px`,
         ...style,
@@ -102,8 +102,8 @@ export function ResizablePanel({
         </div>
       </div>
       
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      {/* Content - with proper overflow handling */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         {children}
       </div>
     </div>

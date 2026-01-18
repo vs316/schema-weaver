@@ -2120,7 +2120,7 @@ const selectedTableRelationships = useMemo(() => {
           isOpen={isSidebarOpen}
           isDarkMode={isDarkMode}
           side="right"
-          className={`border-l shadow-2xl z-30 flex flex-col transition-all duration-300 overflow-hidden ${
+          className={`border-l shadow-2xl z-30 transition-all duration-300 ${
             isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"
           }`}
           style={{ 
@@ -2130,7 +2130,7 @@ const selectedTableRelationships = useMemo(() => {
         >
           {/* Header with toggle and popup buttons */}
           <div
-            className={`p-4 border-b flex items-center justify-between whitespace-nowrap transition-colors duration-300 ${
+            className={`p-4 border-b flex items-center justify-between whitespace-nowrap transition-colors duration-300 flex-shrink-0 ${
               isDarkMode ? "border-slate-800" : "border-slate-200"
             }`}
           >
@@ -2142,14 +2142,14 @@ const selectedTableRelationships = useMemo(() => {
               <span className="text-[10px] font-mono text-indigo-400">{lastSaved || "..."}</span>
               <button
                 onClick={() => _setIsSidebarPopup(true)}
-                className="p-1 hover:bg-slate-800/50 rounded text-slate-400 hover:text-slate-200 flex-shrink-0"
+                className={`p-1 rounded flex-shrink-0 transition-colors ${isDarkMode ? "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-700"}`}
                 title="Open in popup modal"
               >
                 <ExternalLink size={14} />
               </button>
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-1 hover:bg-slate-800/50 rounded text-slate-400 hover:text-slate-200 flex-shrink-0"
+                className={`p-1 rounded flex-shrink-0 transition-colors ${isDarkMode ? "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-700"}`}
                 title="Collapse sidebar"
               >
                 <ChevronRight size={16} />
@@ -2435,18 +2435,26 @@ const selectedTableRelationships = useMemo(() => {
             <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
               Color
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Current color display */}
               <div
-                className="w-6 h-6 rounded-md border cursor-pointer"
-                style={{ background: t.color || "#64748b" }}
+                className="w-8 h-8 rounded-lg border-2 shadow-inner"
+                style={{ 
+                  background: t.color || "#64748b",
+                  borderColor: isDarkMode ? '#475569' : '#cbd5e1'
+                }}
                 title="Current color"
               />
-              <div className="flex items-center gap-2">
-                {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444"].map((c) => (
+              {/* Preset colors */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444", "#ec4899", "#06b6d4"].map((c) => (
                   <button
                     key={c}
-                    className={`w-6 h-6 rounded-md border hover:scale-105 transition-transform ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
-                    style={{ background: c }}
+                    className={`w-6 h-6 rounded-md border hover:scale-110 transition-all shadow-sm ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""} ${t.color === c ? "ring-2 ring-offset-1 ring-indigo-500" : ""}`}
+                    style={{ 
+                      background: c,
+                      borderColor: isDarkMode ? '#334155' : '#e2e8f0'
+                    }}
                     onClick={() => {
                       if (!isLocked && userRole.canEdit) {
                         setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
@@ -2454,12 +2462,53 @@ const selectedTableRelationships = useMemo(() => {
                       }
                     }}
                     disabled={isLocked || !userRole.canEdit}
-                    title="Set color"
+                    title={`Set color ${c}`}
                   />
                 ))}
               </div>
-              <Palette size={14} className="opacity-40" />
             </div>
+            {/* Custom color picker with opacity */}
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="color"
+                value={t.color || "#64748b"}
+                onChange={(e) => {
+                  if (!isLocked && userRole.canEdit) {
+                    setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: e.target.value } : x)));
+                  }
+                }}
+                onBlur={() => pushHistory()}
+                disabled={isLocked || !userRole.canEdit}
+                className={`w-8 h-8 rounded cursor-pointer border-0 ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+                style={{ padding: 0 }}
+                title="Pick custom color"
+              />
+              <input
+                type="text"
+                value={t.color || "#64748b"}
+                onChange={(e) => {
+                  if (!isLocked && userRole.canEdit) {
+                    const value = e.target.value;
+                    // Allow hex, rgb, rgba formats
+                    if (/^#[0-9A-Fa-f]{0,8}$/.test(value) || /^rgba?\(/.test(value)) {
+                      setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: value } : x)));
+                    }
+                  }
+                }}
+                onBlur={() => pushHistory()}
+                disabled={isLocked || !userRole.canEdit}
+                placeholder="#hex or rgba(r,g,b,a)"
+                className={`flex-1 px-2 py-1 rounded text-xs font-mono border outline-none transition-all ${
+                  isDarkMode 
+                    ? "bg-slate-950 border-slate-700 text-slate-300 focus:border-indigo-500" 
+                    : "bg-white border-slate-300 text-slate-700 focus:border-indigo-400"
+                } ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+              />
+              <Palette size={14} className="opacity-40 flex-shrink-0" />
+            </div>
+            <p className={`text-[9px] ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+              Supports hex (#rrggbb), rgba(r,g,b,a) for opacity
+            </p>
           </div>
         )}
 
@@ -2958,6 +3007,229 @@ const selectedTableRelationships = useMemo(() => {
         onClose={() => setShowKeyboardShortcuts(false)}
         isDarkMode={isDarkMode}
       />
+
+      {/* Designer Sidebar Popup Modal */}
+      {_isSidebarPopup && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-8"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) _setIsSidebarPopup(false);
+          }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          
+          {/* Modal */}
+          <div 
+            className={`relative w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scale-in ${
+              isDarkMode ? "bg-slate-900 border border-slate-700" : "bg-white border border-slate-200"
+            }`}
+          >
+            {/* Modal Header */}
+            <div className={`p-4 border-b flex items-center justify-between flex-shrink-0 ${
+              isDarkMode ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-slate-50"
+            }`}>
+              <h2 className="font-bold text-sm uppercase tracking-widest flex items-center gap-2">
+                <Settings size={18} className="text-indigo-500" /> Designer Panel
+              </h2>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-bold opacity-40 uppercase">Saved</span>
+                <span className="text-[10px] font-mono text-indigo-400">{lastSaved || "..."}</span>
+                <button
+                  onClick={() => _setIsSidebarPopup(false)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isDarkMode ? "hover:bg-slate-700 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                  }`}
+                  title="Close popup"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {selectedTableId ? (
+                (() => {
+                  const t = tables.find((x) => x.id === selectedTableId)!;
+                  if (!t) return <div className={`text-center py-8 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Table not found</div>;
+                  
+                  return (
+                    <div className="space-y-6">
+                      {/* Table Name */}
+                      <div className="space-y-2">
+                        <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                          Table name
+                        </label>
+                        <input
+                          className={`w-full rounded-lg px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500 outline-none border transition-all ${
+                            isDarkMode
+                              ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
+                              : "bg-slate-50 border-slate-300 text-slate-900 focus:border-indigo-400"
+                          } ${(effectiveIsLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+                          value={t.name}
+                          onChange={(e) => userRole.canEdit && !effectiveIsLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))}
+                          onBlur={() => pushHistory()}
+                          disabled={effectiveIsLocked || !userRole.canEdit}
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div className="space-y-2">
+                        <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                          Description
+                        </label>
+                        <textarea
+                          className={`w-full rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none border transition-all resize-none ${
+                            isDarkMode
+                              ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500"
+                              : "bg-slate-50 border-slate-300 text-slate-900 focus:border-indigo-400"
+                          } ${(effectiveIsLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+                          rows={4}
+                          placeholder="Add notes about this table..."
+                          value={t.description || ""}
+                          onChange={(e) => userRole.canEdit && !effectiveIsLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
+                          onBlur={() => pushHistory()}
+                          disabled={effectiveIsLocked || !userRole.canEdit}
+                        />
+                      </div>
+
+                      {/* Color */}
+                      {userRole.canEdit && (
+                        <div className="space-y-2">
+                          <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                            Color
+                          </label>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div
+                              className="w-10 h-10 rounded-lg border-2 shadow-inner"
+                              style={{ 
+                                background: t.color || "#64748b",
+                                borderColor: isDarkMode ? '#475569' : '#cbd5e1'
+                              }}
+                            />
+                            {["#64748b", "#60a5fa", "#34d399", "#f59e0b", "#a78bfa", "#ef4444", "#ec4899", "#06b6d4"].map((c) => (
+                              <button
+                                key={c}
+                                className={`w-8 h-8 rounded-lg border hover:scale-110 transition-all shadow-sm ${t.color === c ? "ring-2 ring-offset-2 ring-indigo-500" : ""}`}
+                                style={{ 
+                                  background: c,
+                                  borderColor: isDarkMode ? '#334155' : '#e2e8f0'
+                                }}
+                                onClick={() => {
+                                  if (!effectiveIsLocked && userRole.canEdit) {
+                                    setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: c } : x)));
+                                    pushHistory();
+                                  }
+                                }}
+                                disabled={effectiveIsLocked || !userRole.canEdit}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={t.color || "#64748b"}
+                              onChange={(e) => {
+                                if (!effectiveIsLocked && userRole.canEdit) {
+                                  setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: e.target.value } : x)));
+                                }
+                              }}
+                              onBlur={() => pushHistory()}
+                              disabled={effectiveIsLocked || !userRole.canEdit}
+                              className="w-10 h-10 rounded cursor-pointer border-0"
+                              title="Pick custom color"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Columns in 2-column grid */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                            Columns ({t.columns.length})
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {t.columns.map((col) => (
+                            <div
+                              key={col.id}
+                              className={`p-3 rounded-xl border ${
+                                isDarkMode ? "bg-slate-950 border-slate-700" : "bg-slate-50 border-slate-200"
+                              }`}
+                            >
+                              <div className={`font-bold text-sm mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                                {col.name}
+                              </div>
+                              <div className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
+                                {col.type} {col.isPk && "• PK"} {col.isFk && "• FK"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Comments summary */}
+                      <div className="space-y-2">
+                        <label className={`text-xs font-bold uppercase ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                          Comments ({selectedTableComments.length})
+                        </label>
+                        {selectedTableComments.length > 0 ? (
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {selectedTableComments.map((comment: TableComment) => (
+                              <div
+                                key={comment.id}
+                                className={`p-3 rounded-lg border ${
+                                  isDarkMode ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-200"
+                                }`}
+                              >
+                                <div className={`text-xs font-bold ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                                  {comment.author_email?.split('@')[0] || 'User'}
+                                </div>
+                                <div className={`text-sm my-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                                  {comment.content}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className={`text-sm ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No comments yet</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : selectedEdgeId ? (
+                <div className={`text-center py-8 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                  Edge editing - use the sidebar for edge controls
+                </div>
+              ) : (
+                <div className={`text-center py-12 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+                  <MousePointer2 size={48} className="mx-auto mb-4 opacity-50" />
+                  <p className="text-sm font-bold uppercase tracking-widest">
+                    Select a table to view details
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className={`p-4 border-t flex items-center justify-end gap-3 flex-shrink-0 ${
+              isDarkMode ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-slate-50"
+            }`}>
+              <button
+                onClick={() => _setIsSidebarPopup(false)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  isDarkMode 
+                    ? "bg-slate-700 hover:bg-slate-600 text-slate-200" 
+                    : "bg-slate-200 hover:bg-slate-300 text-slate-700"
+                }`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toasts */}
       <div className="pointer-events-none fixed bottom-4 right-4 flex flex-col gap-2 z-[60]">
