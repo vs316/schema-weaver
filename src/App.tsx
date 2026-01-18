@@ -47,12 +47,12 @@ import { useUserRole } from "./hooks/useUserRole";
 import { useRealTimeNotifications } from "./hooks/useRealTimeNotifications";
 import { RealTimeNotification } from "./components/RealTimeNotification";
 import { DiagramTypeSelector } from "./components/DiagramTypeSelector";
-// UML/Flowchart components - will be used when canvas rendering is integrated
-// import { UMLClassNode } from "./components/UMLClassNode";
-// import { UMLClassEditor } from "./components/UMLClassEditor";
-// import { FlowchartNode } from "./components/FlowchartNode";
-// import { FlowchartToolbox, FlowchartNodeEditor } from "./components/FlowchartToolbox";
-// import { UMLMarkerDefs, UMLRelationLine } from "./components/UMLRelationLine";
+import { UMLClassNode } from "./components/UMLClassNode";
+import { UMLClassEditor } from "./components/UMLClassEditor";
+import { FlowchartNode } from "./components/FlowchartNode";
+import { FlowchartToolbox, FlowchartNodeEditor } from "./components/FlowchartToolbox";
+import { UMLMarkerDefs, UMLRelationLine } from "./components/UMLRelationLine";
+import type { UMLClass, UMLRelation, UMLRelationType, FlowchartNode as FlowchartNodeType, FlowchartConnection } from "./types/uml";
 import type { DiagramType } from "./types/uml";
 
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
@@ -272,13 +272,24 @@ const [_isSidebarPopup, _setIsSidebarPopup] = useState(false);
 
 // Feature 11: Multi-diagram type support (ERD, UML Class, Flowchart)
 const [diagramType, setDiagramType] = useState<DiagramType>('erd');
-// UML/Flowchart state - will be used when canvas rendering is fully integrated
-// const [umlClasses, setUmlClasses] = useState<UMLClass[]>([]);
-// const [umlRelations, setUmlRelations] = useState<UMLRelation[]>([]);
-// const [flowchartNodes, setFlowchartNodes] = useState<FlowchartNodeType[]>([]);
-// const [flowchartConnections, setFlowchartConnections] = useState<FlowchartConnection[]>([]);
-// const [selectedUmlClassId, setSelectedUmlClassId] = useState<string | null>(null);
-// const [selectedFlowchartNodeId, setSelectedFlowchartNodeId] = useState<string | null>(null);
+// UML Class Diagram state
+const [umlClasses, setUmlClasses] = useState<UMLClass[]>([]);
+const [umlRelations, setUmlRelations] = useState<UMLRelation[]>([]);
+const [selectedUmlClassId, setSelectedUmlClassId] = useState<string | null>(null);
+const [selectedUmlRelationId, setSelectedUmlRelationId] = useState<string | null>(null);
+const [isDrawingUmlRelation, setIsDrawingUmlRelation] = useState(false);
+const [umlRelationSource, setUmlRelationSource] = useState<string | null>(null);
+const [pendingUmlRelationType, setPendingUmlRelationType] = useState<UMLRelationType>('association');
+
+// Flowchart state  
+const [flowchartNodes, setFlowchartNodes] = useState<FlowchartNodeType[]>([]);
+const [flowchartConnections, setFlowchartConnections] = useState<FlowchartConnection[]>([]);
+const [selectedFlowchartNodeId, setSelectedFlowchartNodeId] = useState<string | null>(null);
+const [selectedFlowchartConnectionId, setSelectedFlowchartConnectionId] = useState<string | null>(null);
+
+// Flowchart connection drawing state
+const [isDrawingConnection, setIsDrawingConnection] = useState(false);
+const [connectionSource, setConnectionSource] = useState<string | null>(null);
 
 // Auto-lock for readers/viewers - they cannot unlock
 const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
@@ -780,7 +791,7 @@ const selectedTableRelationships = useMemo(() => {
     const worldPos = toWorld(e.clientX, e.clientY);
     updateCursor(worldPos.x, worldPos.y);
 
-  // TABLE DRAG - Using absolute positioning for smooth movement
+  // TABLE/UML/FLOWCHART DRAG - Using absolute positioning for smooth movement
   if (isDragging && draggedTableId && !isPanning && initialDragPosRef.current) {
     const world = toWorld(e.clientX, e.clientY);
     const { tableX, tableY, mouseX, mouseY } = initialDragPosRef.current;
@@ -794,23 +805,34 @@ const selectedTableRelationships = useMemo(() => {
       newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
     }
 
-    // Apply to all selected tables using their stored offsets
-    setTables((prev) =>
-      prev.map((t) => {
-        const offset = multiDragOffsetsRef.current.get(t.id);
-        if (!offset && t.id !== draggedTableId) return t;
-        
-        if (t.id === draggedTableId) {
-          return { ...t, x: newX, y: newY };
-        }
-        
-        return { 
-          ...t, 
-          x: newX + offset!.dx, 
-          y: newY + offset!.dy,
-        };
-      })
-    );
+    // Handle different diagram types
+    if (diagramType === 'uml-class') {
+      setUmlClasses((prev) =>
+        prev.map((c) => c.id === draggedTableId ? { ...c, x: newX, y: newY } : c)
+      );
+    } else if (diagramType === 'flowchart') {
+      setFlowchartNodes((prev) =>
+        prev.map((n) => n.id === draggedTableId ? { ...n, x: newX, y: newY } : n)
+      );
+    } else {
+      // ERD mode - Apply to all selected tables using their stored offsets
+      setTables((prev) =>
+        prev.map((t) => {
+          const offset = multiDragOffsetsRef.current.get(t.id);
+          if (!offset && t.id !== draggedTableId) return t;
+          
+          if (t.id === draggedTableId) {
+            return { ...t, x: newX, y: newY };
+          }
+          
+          return { 
+            ...t, 
+            x: newX + offset!.dx, 
+            y: newY + offset!.dy,
+          };
+        })
+      );
+    }
     return;
   }
 
@@ -1865,223 +1887,441 @@ const selectedTableRelationships = useMemo(() => {
               transition: isPanning ? "none" : "transform 0.1s ease-out",
             }}
           >
-            <svg className="absolute inset-0 pointer-events-none overflow-visible w-[5000px] h-[5000px]">
-              {relations.map((r) => {
-                const path = getPath(r);
-                if (!path) return null;
+            {/* ERD Mode - Tables and Relations */}
+            {diagramType === 'erd' && (
+              <>
+                <svg className="absolute inset-0 pointer-events-none overflow-visible w-[5000px] h-[5000px]">
+                  {relations.map((r) => {
+                    const path = getPath(r);
+                    if (!path) return null;
 
-                const isSelected = selectedEdgeId === r.id;
-                const connectedEdge = isEdgeConnected(r.id);
-                const showHandle = isSelected;
-                const labelPos = r.label ? getLabelPos(r) : null;
-                
-                // Check if this relation is connected to the selected table for animation
-                const isAnimated = selectedTableId && 
-                  (r.sourceTableId === selectedTableId || r.targetTableId === selectedTableId);
+                    const isSelected = selectedEdgeId === r.id;
+                    const connectedEdge = isEdgeConnected(r.id);
+                    const showHandle = isSelected;
+                    const labelPos = r.label ? getLabelPos(r) : null;
+                    
+                    // Check if this relation is connected to the selected table for animation
+                    const isAnimated = selectedTableId && 
+                      (r.sourceTableId === selectedTableId || r.targetTableId === selectedTableId);
 
-                return (
-                  <g key={r.id} className="pointer-events-auto cursor-pointer">
-                    <path d={path} fill="none" stroke="transparent" strokeWidth="22" onClick={(e) => handleEdgeClick(e as any, r.id)} />
+                    return (
+                      <g key={r.id} className="pointer-events-auto cursor-pointer">
+                        <path d={path} fill="none" stroke="transparent" strokeWidth="22" onClick={(e) => handleEdgeClick(e as any, r.id)} />
 
-                    {/* Animated glow effect for connected relations */}
-                    {isAnimated && (
-                      <path
-                        d={path}
-                        fill="none"
-                        stroke="#6366f1"
-                        strokeWidth={6}
-                        strokeOpacity={0.3}
-                        strokeDasharray={r.isDashed ? "5,5" : "0"}
-                        className="animate-pulse"
-                      />
-                    )}
-
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke={edgeStroke(r)}
-                      strokeWidth={edgeWidth(r)}
-                      strokeDasharray={r.isDashed ? "5,5" : "0"}
-                      className="transition-all duration-300"
-                      style={{
-                        strokeDashoffset: isAnimated ? '0' : undefined,
-                        animation: isAnimated ? 'dash 1.5s ease-in-out infinite' : undefined,
-                      }}
-                      onClick={(e) => handleEdgeClick(e as any, r.id)}
-                    />
-
-                    {/* Animated flow indicators for selected table connections - works for both solid and dashed */}
-                    {isAnimated && (
-                      <>
-                        <circle r={r.isDashed ? 3 : 4} fill="#6366f1" opacity={r.isDashed ? 0.8 : 1}>
-                          <animateMotion
-                            dur={r.isDashed ? "2.5s" : "2s"}
-                            repeatCount="indefinite"
-                            path={path}
+                        {/* Animated glow effect for connected relations */}
+                        {isAnimated && (
+                          <path
+                            d={path}
+                            fill="none"
+                            stroke="#6366f1"
+                            strokeWidth={6}
+                            strokeOpacity={0.3}
+                            strokeDasharray={r.isDashed ? "5,5" : "0"}
+                            className="animate-pulse"
                           />
-                        </circle>
-                        {/* Second dot for dashed lines to emphasize flow */}
-                        {r.isDashed && (
-                          <circle r={3} fill="#a78bfa" opacity={0.6}>
-                            <animateMotion
-                              dur="2.5s"
-                              repeatCount="indefinite"
-                              path={path}
-                              begin="1.25s"
-                            />
-                          </circle>
                         )}
-                      </>
-                    )}
 
-                    {r.label && labelPos && (
-                      <text
-                        x={labelPos.x}
-                        y={labelPos.y - 6}
-                        fill={labelFill(r)}
-                        fontSize="11"
-                        fontWeight="800"
-                        textAnchor="middle"
-                        className="select-none"
-                        style={{
-                          paintOrder: "stroke",
-                          stroke: isDarkMode ? "rgba(2,6,23,0.65)" : "rgba(248,250,252,0.85)",
-                          strokeWidth: connectedEdge ? 3 : 2,
-                        }}
-                        onClick={(e) => handleEdgeClick(e as any, r.id)}
-                      >
-                        {r.label}
-                      </text>
-                    )}
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke={edgeStroke(r)}
+                          strokeWidth={edgeWidth(r)}
+                          strokeDasharray={r.isDashed ? "5,5" : "0"}
+                          className="transition-all duration-300"
+                          style={{
+                            strokeDashoffset: isAnimated ? '0' : undefined,
+                            animation: isAnimated ? 'dash 1.5s ease-in-out infinite' : undefined,
+                          }}
+                          onClick={(e) => handleEdgeClick(e as any, r.id)}
+                        />
 
-                    {showHandle &&
-                      (() => {
-                        const a = getAnchors(r);
-                        if (!a) return null;
-                        const { cx, cy } = a;
+                        {/* Animated flow indicators for selected table connections */}
+                        {isAnimated && (
+                          <>
+                            <circle r={r.isDashed ? 3 : 4} fill="#6366f1" opacity={r.isDashed ? 0.8 : 1}>
+                              <animateMotion
+                                dur={r.isDashed ? "2.5s" : "2s"}
+                                repeatCount="indefinite"
+                                path={path}
+                              />
+                            </circle>
+                            {r.isDashed && (
+                              <circle r={3} fill="#a78bfa" opacity={0.6}>
+                                <animateMotion
+                                  dur="2.5s"
+                                  repeatCount="indefinite"
+                                  path={path}
+                                  begin="1.25s"
+                                />
+                              </circle>
+                            )}
+                          </>
+                        )}
 
-                        return (
-                          <g>
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={7}
-                              fill={isDarkMode ? "#0f172a" : "#ffffff"}
-                              stroke="#6366f1"
-                              strokeWidth="2"
-                              className="cursor-grab active:cursor-grabbing"
-                              onMouseDown={(e) => handleEdgeHandleMouseDown(e as any, r.id)}
-                            />
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={16}
-                              fill="transparent"
-                              className="cursor-grab active:cursor-grabbing"
-                              onMouseDown={(e) => handleEdgeHandleMouseDown(e as any, r.id)}
-                            />
-                          </g>
-                        );
-                      })()}
-                  </g>
-                );
-              })}
-            </svg>
+                        {r.label && labelPos && (
+                          <text
+                            x={labelPos.x}
+                            y={labelPos.y - 6}
+                            fill={labelFill(r)}
+                            fontSize="11"
+                            fontWeight="800"
+                            textAnchor="middle"
+                            className="select-none"
+                            style={{
+                              paintOrder: "stroke",
+                              stroke: isDarkMode ? "rgba(2,6,23,0.65)" : "rgba(248,250,252,0.85)",
+                              strokeWidth: connectedEdge ? 3 : 2,
+                            }}
+                            onClick={(e) => handleEdgeClick(e as any, r.id)}
+                          >
+                            {r.label}
+                          </text>
+                        )}
 
-            {tables.map((table) => {
-              const primary = isTablePrimarySelected(table.id);
-              const connectedTbl = isTableConnected(table.id);
-              const anySel = activeSelectedTableIds.size > 0 || !!selectedEdgeId;
-              const dimUnconnected = anySel && !primary && !connectedTbl;
+                        {showHandle &&
+                          (() => {
+                            const a = getAnchors(r);
+                            if (!a) return null;
+                            const { cx, cy } = a;
 
-              const borderClass = primary
-                ? isDarkMode
-                  ? "border-indigo-500 shadow-lg shadow-indigo-500/30"
-                  : "border-indigo-500 shadow-lg shadow-indigo-500/20"
-                : connectedTbl && anySel
-                ? isDarkMode
-                  ? "border-indigo-300/60 shadow-indigo-500/10"
-                  : "border-indigo-400 shadow-indigo-400/15"
-                : isDarkMode
-                ? "border-slate-700 shadow-lg shadow-slate-950/30"
-                : "border-slate-300 shadow-md shadow-slate-300/40";
+                            return (
+                              <g>
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={7}
+                                  fill={isDarkMode ? "#0f172a" : "#ffffff"}
+                                  stroke="#6366f1"
+                                  strokeWidth="2"
+                                  className="cursor-grab active:cursor-grabbing"
+                                  onMouseDown={(e) => handleEdgeHandleMouseDown(e as any, r.id)}
+                                />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={16}
+                                  fill="transparent"
+                                  className="cursor-grab active:cursor-grabbing"
+                                  onMouseDown={(e) => handleEdgeHandleMouseDown(e as any, r.id)}
+                                />
+                              </g>
+                            );
+                          })()}
+                      </g>
+                    );
+                  })}
+                </svg>
 
-              return (
-                <div
-                  key={table.id}
-                  className={`absolute w-56 rounded-xl border-2 transition-all duration-300 select-none user-select-none hover:shadow-xl
-                    ${isDarkMode ? "bg-slate-900 text-slate-200" : "bg-white text-slate-800 shadow-lg"}
-                    ${borderClass}
-                    ${dimUnconnected ? "opacity-30 scale-95" : ""}
-                  `}
-                  style={{
-                    left: table.x,
-                    top: table.y,
-                    zIndex: primary ? 30 : connectedTbl ? 20 : 10,
-                    boxShadow: table.color ? `0 6px 24px -8px ${table.color}45` : undefined,
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleTableMouseDown(e, table.id);
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  <div
-                    className={`p-3 rounded-t-xl cursor-grab active:cursor-grabbing border-b flex items-center justify-between min-w-0 user-select-none transition-colors duration-200
-                      ${isDarkMode ? "bg-slate-800/70 border-slate-700 hover:bg-slate-800" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
-                    style={{ background: table.color ? `${table.color}${isDarkMode ? '25' : '18'}` : undefined }}
-                  >
-                    <span className={`font-black text-[10px] uppercase tracking-widest truncate ${
-                      primary ? (isDarkMode ? "text-indigo-200" : "text-indigo-700") : (isDarkMode ? "opacity-70" : "opacity-90 text-slate-700")
-                    }`}>
-                      {table.name}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        title="Duplicate"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicateTable(table.id);
-                        }}
-                        className={`p-1 rounded-md transition-all ${isDarkMode ? "hover:bg-slate-700" : "hover:bg-slate-200"}`}
-                      >
-                        <Copy size={12} />
-                      </button>
-                      <GripHorizontal size={14} className="opacity-30 flex-shrink-0" />
-                    </div>
-                  </div>
+                {tables.map((table) => {
+                  const primary = isTablePrimarySelected(table.id);
+                  const connectedTbl = isTableConnected(table.id);
+                  const anySel = activeSelectedTableIds.size > 0 || !!selectedEdgeId;
+                  const dimUnconnected = anySel && !primary && !connectedTbl;
 
-                  <div className="p-2.5 space-y-1.5">
-                    {table.columns.map((col) => (
+                  const borderClass = primary
+                    ? isDarkMode
+                      ? "border-indigo-500 shadow-lg shadow-indigo-500/30"
+                      : "border-indigo-500 shadow-lg shadow-indigo-500/20"
+                    : connectedTbl && anySel
+                    ? isDarkMode
+                      ? "border-indigo-300/60 shadow-indigo-500/10"
+                      : "border-indigo-400 shadow-indigo-400/15"
+                    : isDarkMode
+                    ? "border-slate-700 shadow-lg shadow-slate-950/30"
+                    : "border-slate-300 shadow-md shadow-slate-300/40";
+
+                  return (
+                    <div
+                      key={table.id}
+                      className={`absolute w-56 rounded-xl border-2 transition-all duration-300 select-none user-select-none hover:shadow-xl
+                        ${isDarkMode ? "bg-slate-900 text-slate-200" : "bg-white text-slate-800 shadow-lg"}
+                        ${borderClass}
+                        ${dimUnconnected ? "opacity-30 scale-95" : ""}
+                      `}
+                      style={{
+                        left: table.x,
+                        top: table.y,
+                        zIndex: primary ? 30 : connectedTbl ? 20 : 10,
+                        boxShadow: table.color ? `0 6px 24px -8px ${table.color}45` : undefined,
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleTableMouseDown(e, table.id);
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
                       <div
-                        key={col.id}
-                        className={`flex items-center text-[11px] justify-between px-1 py-1 rounded transition-colors duration-150 ${
-                          isDarkMode ? "hover:bg-slate-700/30" : "hover:bg-slate-100"
-                        }`}
+                        className={`p-3 rounded-t-xl cursor-grab active:cursor-grabbing border-b flex items-center justify-between min-w-0 user-select-none transition-colors duration-200
+                          ${isDarkMode ? "bg-slate-800/70 border-slate-700 hover:bg-slate-800" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
+                        style={{ background: table.color ? `${table.color}${isDarkMode ? '25' : '18'}` : undefined }}
                       >
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          {col.isPk && <Key size={10} className={isDarkMode ? "text-amber-400" : "text-amber-600"} />}
-                          {col.isFk && <LinkIcon size={10} className={isDarkMode ? "text-indigo-400" : "text-indigo-600"} />}
-                          <span
-                            className={`truncate ${col.isPk ? "font-bold" : ""} ${
-                              isDarkMode 
-                                ? (col.isPk ? "text-indigo-300" : "text-slate-300") 
-                                : (col.isPk ? "text-indigo-700" : "text-slate-700")
+                        <span className={`font-black text-[10px] uppercase tracking-widest truncate ${
+                          primary ? (isDarkMode ? "text-indigo-200" : "text-indigo-700") : (isDarkMode ? "opacity-70" : "opacity-90 text-slate-700")
+                        }`}>
+                          {table.name}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            title="Duplicate"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              duplicateTable(table.id);
+                            }}
+                            className={`p-1 rounded-md transition-all ${isDarkMode ? "hover:bg-slate-700" : "hover:bg-slate-200"}`}
+                          >
+                            <Copy size={12} />
+                          </button>
+                          <GripHorizontal size={14} className="opacity-30 flex-shrink-0" />
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 space-y-1.5">
+                        {table.columns.map((col) => (
+                          <div
+                            key={col.id}
+                            className={`flex items-center text-[11px] justify-between px-1 py-1 rounded transition-colors duration-150 ${
+                              isDarkMode ? "hover:bg-slate-700/30" : "hover:bg-slate-100"
                             }`}
                           >
-                            {col.name}
-                          </span>
-                        </div>
-                        <span className={`text-[9px] font-mono flex-shrink-0 ml-1 ${
-                          isDarkMode ? "text-slate-500" : "text-slate-500"
-                        }`}>{col.type}</span>
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                              {col.isPk && <Key size={10} className={isDarkMode ? "text-amber-400" : "text-amber-600"} />}
+                              {col.isFk && <LinkIcon size={10} className={isDarkMode ? "text-indigo-400" : "text-indigo-600"} />}
+                              <span
+                                className={`truncate ${col.isPk ? "font-bold" : ""} ${
+                                  isDarkMode 
+                                    ? (col.isPk ? "text-indigo-300" : "text-slate-300") 
+                                    : (col.isPk ? "text-indigo-700" : "text-slate-700")
+                                }`}
+                              >
+                                {col.name}
+                              </span>
+                            </div>
+                            <span className={`text-[9px] font-mono flex-shrink-0 ml-1 ${
+                              isDarkMode ? "text-slate-500" : "text-slate-500"
+                            }`}>{col.type}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* UML Class Diagram Mode */}
+            {diagramType === 'uml-class' && (
+              <>
+                <svg className="absolute inset-0 pointer-events-none overflow-visible w-[5000px] h-[5000px]">
+                  <UMLMarkerDefs isDarkMode={isDarkMode} />
+                  {umlRelations.map((rel) => {
+                    const sourceClass = umlClasses.find(c => c.id === rel.sourceClassId);
+                    const targetClass = umlClasses.find(c => c.id === rel.targetClassId);
+                    return (
+                      <UMLRelationLine
+                        key={rel.id}
+                        relation={rel}
+                        sourceClass={sourceClass}
+                        targetClass={targetClass}
+                        isDarkMode={isDarkMode}
+                        isSelected={selectedUmlRelationId === rel.id}
+                      />
+                    );
+                  })}
+                </svg>
+
+                {umlClasses.map((umlClass) => (
+                  <UMLClassNode
+                    key={umlClass.id}
+                    umlClass={umlClass}
+                    isSelected={selectedUmlClassId === umlClass.id}
+                    isDarkMode={isDarkMode}
+                    zoom={viewport.zoom}
+                    onSelect={() => {
+                      if (isDrawingUmlRelation && umlRelationSource && umlRelationSource !== umlClass.id) {
+                        // Complete the relation
+                        const newRelation: UMLRelation = {
+                          id: generateId(),
+                          sourceClassId: umlRelationSource,
+                          targetClassId: umlClass.id,
+                          type: pendingUmlRelationType,
+                        };
+                        setUmlRelations(prev => [...prev, newRelation]);
+                        setIsDrawingUmlRelation(false);
+                        setUmlRelationSource(null);
+                        push({ title: "Relation created", type: "success" });
+                      } else {
+                        setSelectedUmlClassId(umlClass.id);
+                        setSelectedUmlRelationId(null);
+                      }
+                    }}
+                    onDragStart={(e) => {
+                      if (effectiveIsLocked) return;
+                      e.preventDefault();
+                      const world = toWorld(e.clientX, e.clientY);
+                      initialDragPosRef.current = {
+                        tableX: umlClass.x,
+                        tableY: umlClass.y,
+                        mouseX: world.x,
+                        mouseY: world.y,
+                      };
+                      setDraggedTableId(umlClass.id);
+                      setIsDragging(true);
+                    }}
+                  />
+                ))}
+
+                {/* UML Mode placeholder when empty */}
+                {umlClasses.length === 0 && (
+                  <div 
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <div className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                      UML Class Diagram
+                    </div>
+                    <div className={`text-sm ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                      Click "Add Class" in the sidebar to get started
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                )}
+              </>
+            )}
+
+            {/* Flowchart Mode */}
+            {diagramType === 'flowchart' && (
+              <>
+                <svg className="absolute inset-0 pointer-events-none overflow-visible w-[5000px] h-[5000px]">
+                  {flowchartConnections.map((conn) => {
+                    const sourceNode = flowchartNodes.find(n => n.id === conn.sourceNodeId);
+                    const targetNode = flowchartNodes.find(n => n.id === conn.targetNodeId);
+                    if (!sourceNode || !targetNode) return null;
+
+                    const sx = sourceNode.x + 60;
+                    const sy = sourceNode.y + 25;
+                    const tx = targetNode.x + 60;
+                    const ty = targetNode.y + 25;
+                    const path = conn.lineType === 'curved'
+                      ? `M ${sx} ${sy} Q ${(sx + tx) / 2} ${sy} ${tx} ${ty}`
+                      : `M ${sx} ${sy} L ${tx} ${ty}`;
+
+                    return (
+                      <g key={conn.id} className="pointer-events-auto cursor-pointer">
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke={selectedFlowchartConnectionId === conn.id ? '#6366f1' : isDarkMode ? '#475569' : '#94a3b8'}
+                          strokeWidth={selectedFlowchartConnectionId === conn.id ? 3 : 2}
+                          markerEnd="url(#arrowhead)"
+                        />
+                        {conn.label && (
+                          <text
+                            x={(sx + tx) / 2}
+                            y={(sy + ty) / 2 - 8}
+                            fill={isDarkMode ? '#94a3b8' : '#475569'}
+                            fontSize="10"
+                            textAnchor="middle"
+                          >
+                            {conn.label}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                  {/* Arrowhead marker */}
+                  <defs>
+                    <marker
+                      id="arrowhead"
+                      markerWidth="10"
+                      markerHeight="7"
+                      refX="9"
+                      refY="3.5"
+                      orient="auto"
+                    >
+                      <polygon
+                        points="0 0, 10 3.5, 0 7"
+                        fill={isDarkMode ? '#475569' : '#94a3b8'}
+                      />
+                    </marker>
+                  </defs>
+                </svg>
+
+                {flowchartNodes.map((node) => (
+                  <FlowchartNode
+                    key={node.id}
+                    node={node}
+                    isSelected={selectedFlowchartNodeId === node.id}
+                    isDarkMode={isDarkMode}
+                    onSelect={() => {
+                      if (isDrawingConnection && connectionSource && connectionSource !== node.id) {
+                        // Complete the connection
+                        const newConnection: FlowchartConnection = {
+                          id: generateId(),
+                          sourceNodeId: connectionSource,
+                          targetNodeId: node.id,
+                          lineType: 'curved',
+                        };
+                        setFlowchartConnections(prev => [...prev, newConnection]);
+                        setIsDrawingConnection(false);
+                        setConnectionSource(null);
+                        push({ title: "Connection created", type: "success" });
+                      } else {
+                        setSelectedFlowchartNodeId(node.id);
+                        setSelectedFlowchartConnectionId(null);
+                      }
+                    }}
+                    onDragStart={(e) => {
+                      if (effectiveIsLocked) return;
+                      e.preventDefault();
+                      const world = toWorld(e.clientX, e.clientY);
+                      initialDragPosRef.current = {
+                        tableX: node.x,
+                        tableY: node.y,
+                        mouseX: world.x,
+                        mouseY: world.y,
+                      };
+                      setDraggedTableId(node.id);
+                      setIsDragging(true);
+                    }}
+                  />
+                ))}
+
+                {/* Flowchart placeholder when empty */}
+                {flowchartNodes.length === 0 && (
+                  <div 
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <div className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                      Flowchart
+                    </div>
+                    <div className={`text-sm ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                      Use the toolbox below to add nodes
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
+
+          {/* Flowchart Toolbox - visible only in flowchart mode */}
+          {diagramType === 'flowchart' && (
+            <FlowchartToolbox
+              onAddNode={(type) => {
+                const newNode: FlowchartNodeType = {
+                  id: generateId(),
+                  type,
+                  label: type === 'start-end' ? 'Start' : type === 'decision' ? 'Condition?' : 'Process',
+                  x: (window.innerWidth / 2 - viewport.x) / viewport.zoom,
+                  y: (window.innerHeight / 2 - viewport.y) / viewport.zoom,
+                };
+                setFlowchartNodes(prev => [...prev, newNode]);
+                setSelectedFlowchartNodeId(newNode.id);
+                push({ title: "Node added", type: "success" });
+              }}
+              isDarkMode={isDarkMode}
+              isLocked={effectiveIsLocked}
+            />
+          )}
 
           {lassoRect &&
             (() => {
@@ -2924,6 +3164,183 @@ const selectedTableRelationships = useMemo(() => {
                   </div>
                 );
               })()
+            ) : diagramType === 'uml-class' && selectedUmlClassId ? (
+              (() => {
+                const selectedClass = umlClasses.find(c => c.id === selectedUmlClassId);
+                if (!selectedClass) return null;
+                return (
+                  <UMLClassEditor
+                    umlClass={selectedClass}
+                    isLocked={effectiveIsLocked}
+                    onUpdate={(updates) => {
+                      setUmlClasses(prev => prev.map(c => 
+                        c.id === selectedUmlClassId ? { ...c, ...updates } : c
+                      ));
+                    }}
+                    onDelete={() => {
+                      setUmlClasses(prev => prev.filter(c => c.id !== selectedUmlClassId));
+                      setUmlRelations(prev => prev.filter(r => 
+                        r.sourceClassId !== selectedUmlClassId && r.targetClassId !== selectedUmlClassId
+                      ));
+                      setSelectedUmlClassId(null);
+                      push({ title: "Class deleted", type: "info" });
+                    }}
+                  />
+                );
+              })()
+            ) : diagramType === 'flowchart' && selectedFlowchartNodeId ? (
+              (() => {
+                const selectedNode = flowchartNodes.find(n => n.id === selectedFlowchartNodeId);
+                if (!selectedNode) return null;
+                return (
+                  <FlowchartNodeEditor
+                    node={selectedNode}
+                    isLocked={effectiveIsLocked}
+                    onUpdate={(updates) => {
+                      setFlowchartNodes(prev => prev.map(n => 
+                        n.id === selectedFlowchartNodeId ? { ...n, ...updates } : n
+                      ));
+                    }}
+                    onDelete={() => {
+                      setFlowchartNodes(prev => prev.filter(n => n.id !== selectedFlowchartNodeId));
+                      setFlowchartConnections(prev => prev.filter(c => 
+                        c.sourceNodeId !== selectedFlowchartNodeId && c.targetNodeId !== selectedFlowchartNodeId
+                      ));
+                      setSelectedFlowchartNodeId(null);
+                      push({ title: "Node deleted", type: "info" });
+                    }}
+                  />
+                );
+              })()
+            ) : diagramType === 'uml-class' ? (
+              <div className={`space-y-5`}>
+                <div className={`h-full flex flex-col items-center justify-center text-center select-none transition-colors duration-300 ${isDarkMode ? "text-slate-700" : "text-slate-400"}`}>
+                  <MousePointer2 size={40} className="mb-4" />
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    Select a class to edit
+                    <br />
+                    or add a new one
+                  </p>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    const newClass: UMLClass = {
+                      id: generateId(),
+                      name: 'NewClass',
+                      stereotype: undefined,
+                      x: (window.innerWidth / 2 - viewport.x) / viewport.zoom,
+                      y: (window.innerHeight / 2 - viewport.y) / viewport.zoom,
+                      attributes: [],
+                      methods: [],
+                    };
+                    setUmlClasses(prev => [...prev, newClass]);
+                    setSelectedUmlClassId(newClass.id);
+                    push({ title: "Class added", type: "success" });
+                  }}
+                  disabled={effectiveIsLocked}
+                  className={`w-full py-3 rounded-lg text-xs font-bold border transition-all duration-200 ${
+                    effectiveIsLocked 
+                      ? "opacity-50 cursor-not-allowed border-slate-700 text-slate-500"
+                      : "bg-indigo-500/10 border-indigo-500 text-indigo-400 hover:bg-indigo-500 hover:text-white"
+                  }`}
+                >
+                  + Add UML Class
+                </button>
+
+                {/* UML Relation Drawing Tool */}
+                <div className="space-y-2">
+                  <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                    Draw Relationship
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['inheritance', 'composition', 'aggregation', 'association'] as UMLRelationType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setIsDrawingUmlRelation(true);
+                          setPendingUmlRelationType(type);
+                          setUmlRelationSource(null);
+                          push({ title: `Select source class for ${type}`, type: "info" });
+                        }}
+                        disabled={effectiveIsLocked || umlClasses.length < 2}
+                        className={`py-2 px-2 rounded-lg text-[10px] font-medium border transition-all ${
+                          isDrawingUmlRelation && pendingUmlRelationType === type
+                            ? "bg-indigo-500 text-white border-indigo-500"
+                            : isDarkMode
+                            ? "border-slate-700 text-slate-400 hover:bg-slate-800"
+                            : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                        } ${effectiveIsLocked || umlClasses.length < 2 ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  {isDrawingUmlRelation && (
+                    <div className={`text-[10px] p-2 rounded-lg ${isDarkMode ? "bg-indigo-500/10 text-indigo-300" : "bg-indigo-50 text-indigo-700"}`}>
+                      {umlRelationSource ? "Now click target class" : "Click on source class"}
+                      <button
+                        onClick={() => {
+                          setIsDrawingUmlRelation(false);
+                          setUmlRelationSource(null);
+                        }}
+                        className="ml-2 underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : diagramType === 'flowchart' ? (
+              <div className={`space-y-5`}>
+                <div className={`h-full flex flex-col items-center justify-center text-center select-none transition-colors duration-300 ${isDarkMode ? "text-slate-700" : "text-slate-400"}`}>
+                  <MousePointer2 size={40} className="mb-4" />
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    Select a node to edit
+                    <br />
+                    or use the toolbox below
+                  </p>
+                </div>
+
+                {/* Connection drawing tool */}
+                <div className="space-y-2">
+                  <label className={`text-[10px] font-bold uppercase transition-colors duration-200 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                    Draw Connection
+                  </label>
+                  <button
+                    onClick={() => {
+                      setIsDrawingConnection(true);
+                      setConnectionSource(null);
+                      push({ title: "Click on source node", type: "info" });
+                    }}
+                    disabled={effectiveIsLocked || flowchartNodes.length < 2}
+                    className={`w-full py-2 rounded-lg text-xs font-medium border transition-all ${
+                      isDrawingConnection
+                        ? "bg-indigo-500 text-white border-indigo-500"
+                        : isDarkMode
+                        ? "border-slate-700 text-slate-400 hover:bg-slate-800"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    } ${effectiveIsLocked || flowchartNodes.length < 2 ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {isDrawingConnection ? "Drawing..." : "+ Connect Nodes"}
+                  </button>
+                  {isDrawingConnection && (
+                    <div className={`text-[10px] p-2 rounded-lg ${isDarkMode ? "bg-indigo-500/10 text-indigo-300" : "bg-indigo-50 text-indigo-700"}`}>
+                      {connectionSource ? "Now click target node" : "Click on source node"}
+                      <button
+                        onClick={() => {
+                          setIsDrawingConnection(false);
+                          setConnectionSource(null);
+                        }}
+                        className="ml-2 underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <div className={`space-y-5`}>
                 <div className={`h-full flex flex-col items-center justify-center text-center select-none transition-colors duration-300 ${isDarkMode ? "text-slate-700" : "text-slate-400"}`}>
