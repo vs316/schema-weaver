@@ -387,27 +387,19 @@ export function DiagramSelector({
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="rounded-xl p-6 max-w-sm w-full"
-              style={{ 
-                background: 'hsl(222 47% 6%)',
-                border: '1px solid hsl(217 33% 17%)',
-              }}
+              className="rounded-xl p-6 max-w-sm w-full border bg-card"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-semibold mb-2" style={{ color: 'hsl(210 40% 98%)' }}>
+              <h3 className="text-lg font-semibold mb-2 text-foreground">
                 Delete Diagram?
               </h3>
-              <p className="text-sm mb-6" style={{ color: 'hsl(215 20% 65%)' }}>
+              <p className="text-sm mb-6 text-muted-foreground">
                 This action cannot be undone. The diagram will be permanently deleted for all team members.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setDeleteConfirmId(null)}
-                  className="flex-1 py-2 rounded-lg font-medium text-sm"
-                  style={{
-                    background: 'hsl(217 33% 17%)',
-                    color: 'hsl(210 40% 98%)',
-                  }}
+                  className="flex-1 py-2 rounded-lg font-medium text-sm bg-muted text-muted-foreground hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -416,11 +408,7 @@ export function DiagramSelector({
                     onDelete(deleteConfirmId);
                     setDeleteConfirmId(null);
                   }}
-                  className="flex-1 py-2 rounded-lg font-medium text-sm"
-                  style={{
-                    background: 'hsl(0 84% 60%)',
-                    color: 'hsl(0 0% 100%)',
-                  }}
+                  className="flex-1 py-2 rounded-lg font-medium text-sm bg-destructive text-destructive-foreground"
                 >
                   Delete
                 </button>

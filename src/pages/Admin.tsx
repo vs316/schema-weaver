@@ -730,16 +730,16 @@ function UsersTab({
                               onChange={(e) => onUpdateRole(m.id, m.team_id, m.user_id, e.target.value as TeamRole)}
                               className="text-xs px-2 py-1 rounded border cursor-pointer transition-colors duration-300"
                               style={{
-                                borderColor: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(220 13% 91%)',
-                                backgroundColor: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)',
-                                color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
+                                borderColor: 'hsl(var(--border))',
+                                backgroundColor: 'hsl(var(--background))',
+                                color: 'hsl(var(--foreground))',
                               }}
                             >
                               {ROLE_OPTIONS.map(opt => (
                                 <option 
                                   key={opt.value} 
                                   value={opt.value}
-                                  style={{ backgroundColor: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
+                                  style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}
                                 >
                                   {opt.label}
                                 </option>
@@ -805,20 +805,23 @@ function UsersTab({
                         </button>
                       </div>
                       {assigningUser === profile.id && (
-                        <div className="mt-2 p-2 rounded-lg space-y-2" style={{ background: 'hsl(222 47% 8%)' }}>
+                        <div
+                          className="mt-2 p-2 rounded-lg space-y-2 border"
+                          style={{ background: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
+                        >
                           <select
                             value={selectedTeamToAssign}
                             onChange={(e) => setSelectedTeamToAssign(e.target.value)}
                             className="w-full text-xs px-2 py-1 rounded border cursor-pointer"
                             style={{
-                              borderColor: 'hsl(217 33% 25%)',
-                              backgroundColor: 'hsl(222 47% 11%)',
-                              color: 'hsl(210 40% 98%)',
+                              borderColor: 'hsl(var(--border))',
+                              backgroundColor: 'hsl(var(--background))',
+                              color: 'hsl(var(--foreground))',
                             }}
                           >
-                            <option value="" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Select team...</option>
+                            <option value="" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>Select team...</option>
                             {teams.map(t => (
-                              <option key={t.id} value={t.id} style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>
+                              <option key={t.id} value={t.id} style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
                                 {t.name}
                               </option>
                             ))}
@@ -828,13 +831,13 @@ function UsersTab({
                             onChange={(e) => setSelectedRoleToAssign(e.target.value as TeamRole)}
                             className="w-full text-xs px-2 py-1 rounded border cursor-pointer"
                             style={{
-                              borderColor: 'hsl(217 33% 25%)',
-                              backgroundColor: 'hsl(222 47% 11%)',
-                              color: 'hsl(210 40% 98%)',
+                              borderColor: 'hsl(var(--border))',
+                              backgroundColor: 'hsl(var(--background))',
+                              color: 'hsl(var(--foreground))',
                             }}
                           >
                             {ROLE_OPTIONS.map(opt => (
-                              <option key={opt.value} value={opt.value} style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>
+                              <option key={opt.value} value={opt.value} style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
                                 {opt.label}
                               </option>
                             ))}
@@ -853,7 +856,7 @@ function UsersTab({
                               }}
                               disabled={!selectedTeamToAssign}
                               className="flex-1 text-xs px-2 py-1 rounded font-medium disabled:opacity-50"
-                              style={{ background: 'hsl(239 84% 67%)', color: 'white' }}
+                              style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
                             >
                               Assign
                             </button>
@@ -863,21 +866,21 @@ function UsersTab({
                                 setSelectedTeamToAssign('');
                               }}
                               className="text-xs px-2 py-1 rounded"
-                              style={{ color: 'hsl(215 20% 65%)' }}
+                              style={{ color: 'hsl(var(--muted-foreground))' }}
                             >
                               Cancel
                             </button>
                           </div>
                           {/* Show option to remove from existing teams */}
                           {memberships.length > 0 && (
-                            <div className="pt-2 border-t" style={{ borderColor: 'hsl(217 33% 17%)' }}>
-                              <p className="text-[10px] uppercase mb-1" style={{ color: 'hsl(215 20% 45%)' }}>Remove from:</p>
+                            <div className="pt-2 border-t" style={{ borderColor: 'hsl(var(--border))' }}>
+                              <p className="text-[10px] uppercase mb-1" style={{ color: 'hsl(var(--muted-foreground))' }}>Remove from:</p>
                               {memberships.map(m => (
                                 <button
                                   key={m.id}
                                   onClick={() => onRemoveFromTeam(profile.id, m.team_id)}
-                                  className="w-full text-left text-xs px-2 py-1 rounded hover:bg-red-500/10 flex items-center justify-between"
-                                  style={{ color: 'hsl(0 84% 60%)' }}
+                                  className="w-full text-left text-xs px-2 py-1 rounded hover:bg-destructive/10 flex items-center justify-between"
+                                  style={{ color: 'hsl(var(--destructive))' }}
                                 >
                                   <span>{teams.find(t => t.id === m.team_id)?.name || 'Unknown'}</span>
                                   <Trash2 size={10} />

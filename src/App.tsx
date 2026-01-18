@@ -46,6 +46,14 @@ import { ColorPicker } from "./components/ColorPicker";
 import { useUserRole } from "./hooks/useUserRole";
 import { useRealTimeNotifications } from "./hooks/useRealTimeNotifications";
 import { RealTimeNotification } from "./components/RealTimeNotification";
+import { DiagramTypeSelector } from "./components/DiagramTypeSelector";
+// UML/Flowchart components - will be used when canvas rendering is integrated
+// import { UMLClassNode } from "./components/UMLClassNode";
+// import { UMLClassEditor } from "./components/UMLClassEditor";
+// import { FlowchartNode } from "./components/FlowchartNode";
+// import { FlowchartToolbox, FlowchartNodeEditor } from "./components/FlowchartToolbox";
+// import { UMLMarkerDefs, UMLRelationLine } from "./components/UMLRelationLine";
+import type { DiagramType } from "./types/uml";
 
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
 
@@ -236,7 +244,7 @@ function ERDBuilder({
   const lastActionWasDrag = useRef<boolean>(false);
   const historyRef = useRef<Snapshot[]>([]);
   const historyIndexRef = useRef<number>(-1);
-  // Feature 1: Lock/Unlock diagram
+// Feature 1: Lock/Unlock diagram
 const [isLocked, setIsLocked] = useState((diagram as any)?.is_locked ?? false);
 
 // Feature 4: Comments - stored directly in table.comments array (synced to cloud)
@@ -261,6 +269,16 @@ const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
 
 // Feature 10: Sidebar as popup modal
 const [_isSidebarPopup, _setIsSidebarPopup] = useState(false);
+
+// Feature 11: Multi-diagram type support (ERD, UML Class, Flowchart)
+const [diagramType, setDiagramType] = useState<DiagramType>('erd');
+// UML/Flowchart state - will be used when canvas rendering is fully integrated
+// const [umlClasses, setUmlClasses] = useState<UMLClass[]>([]);
+// const [umlRelations, setUmlRelations] = useState<UMLRelation[]>([]);
+// const [flowchartNodes, setFlowchartNodes] = useState<FlowchartNodeType[]>([]);
+// const [flowchartConnections, setFlowchartConnections] = useState<FlowchartConnection[]>([]);
+// const [selectedUmlClassId, setSelectedUmlClassId] = useState<string | null>(null);
+// const [selectedFlowchartNodeId, setSelectedFlowchartNodeId] = useState<string | null>(null);
 
 // Auto-lock for readers/viewers - they cannot unlock
 const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
@@ -1571,9 +1589,24 @@ const selectedTableRelationships = useMemo(() => {
           isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"
         }`}
       >
-        <div className="flex items-center gap-2">
-          <Database size={24} className="text-indigo-500" />
-          <h1 className="text-xl font-bold">ERD Builder</h1>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Database size={24} className="text-indigo-500" />
+            <h1 className="text-xl font-bold">
+              {diagramType === 'erd' ? 'ERD Builder' : diagramType === 'uml-class' ? 'UML Class' : 'Flowchart'}
+            </h1>
+          </div>
+          <DiagramTypeSelector
+            currentType={diagramType}
+            onTypeChange={(type) => {
+              setDiagramType(type);
+              // Clear selections when switching modes
+              setSelectedTableId(null);
+              setSelectedEdgeId(null);
+              setMultiSelectedTableIds(new Set());
+            }}
+            isDarkMode={isDarkMode}
+          />
         </div>
         <div className="flex items-center gap-2">
           <button
