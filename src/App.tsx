@@ -236,8 +236,17 @@ function ERDBuilder({
   // --- TOASTS ---
   const { toasts, push } = useToasts();
 
-  // --- HISTORY (UNDO/REDO) ---
-  type Snapshot = { tables: Table[]; relations: Relation[]; viewport: { x: number; y: number; zoom: number } };
+  // --- HISTORY (UNDO/REDO) - Unified for all diagram types ---
+  type Snapshot = { 
+    tables: Table[]; 
+    relations: Relation[]; 
+    umlClasses: UMLClass[];
+    umlRelations: UMLRelation[];
+    flowchartNodes: FlowchartNodeType[];
+    flowchartConnections: FlowchartConnection[];
+    viewport: { x: number; y: number; zoom: number };
+    diagramType: DiagramType;
+  };
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const suppressHistory = useRef<boolean>(false);
@@ -305,15 +314,23 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
 
   const pushHistory = useCallback((snap?: Snapshot) => {
     if (suppressHistory.current) return;
-    const snapshot: Snapshot =
-      snap ?? { tables: JSON.parse(JSON.stringify(tables)), relations: JSON.parse(JSON.stringify(relations)), viewport: { ...viewport } };
+    const snapshot: Snapshot = snap ?? { 
+      tables: JSON.parse(JSON.stringify(tables)), 
+      relations: JSON.parse(JSON.stringify(relations)),
+      umlClasses: JSON.parse(JSON.stringify(umlClasses)),
+      umlRelations: JSON.parse(JSON.stringify(umlRelations)),
+      flowchartNodes: JSON.parse(JSON.stringify(flowchartNodes)),
+      flowchartConnections: JSON.parse(JSON.stringify(flowchartConnections)),
+      viewport: { ...viewport },
+      diagramType,
+    };
     
     setHistory((prev) => {
       const next = prev.slice(0, historyIndexRef.current + 1);
       return [...next, snapshot];
     });
     setHistoryIndex((idx) => idx + 1);
-  }, [tables, relations, viewport]);
+  }, [tables, relations, umlClasses, umlRelations, flowchartNodes, flowchartConnections, viewport, diagramType]);
 
   // Feature 4: Comments - stored directly in table.comments array (synced to cloud)
   // Get comments for the selected table
@@ -366,18 +383,20 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
     }
     
     try {
-      const validTables = [...snap.tables];
-      const validRelations = snap.relations.filter(
-        r =>
-          validTables.some(t => t.id === r.sourceTableId) &&
-          validTables.some(t => t.id === r.targetTableId)
-      );
-
-      setTables(validTables);
-      setRelations(validRelations);
+      // Restore all diagram types
+      setTables([...snap.tables]);
+      setRelations([...snap.relations]);
+      setUmlClasses([...(snap.umlClasses || [])]);
+      setUmlRelations([...(snap.umlRelations || [])]);
+      setFlowchartNodes([...(snap.flowchartNodes || [])]);
+      setFlowchartConnections([...(snap.flowchartConnections || [])]);
       setViewport({ ...snap.viewport });
+      if (snap.diagramType) setDiagramType(snap.diagramType);
+      
       setSelectedTableId(null);
       setSelectedEdgeId(null);
+      setSelectedUmlClassId(null);
+      setSelectedFlowchartNodeId(null);
       setMultiSelectedTableIds(new Set());
       setHistoryIndex(targetIdx);
       push({ title: "Undo", type: "info" });
@@ -402,18 +421,20 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
     }
     
     try {
-      const validTables = [...snap.tables];
-      const validRelations = snap.relations.filter(
-        r =>
-          validTables.some(t => t.id === r.sourceTableId) &&
-          validTables.some(t => t.id === r.targetTableId)
-      );
-
-      setTables(validTables);
-      setRelations(validRelations);
+      // Restore all diagram types
+      setTables([...snap.tables]);
+      setRelations([...snap.relations]);
+      setUmlClasses([...(snap.umlClasses || [])]);
+      setUmlRelations([...(snap.umlRelations || [])]);
+      setFlowchartNodes([...(snap.flowchartNodes || [])]);
+      setFlowchartConnections([...(snap.flowchartConnections || [])]);
       setViewport({ ...snap.viewport });
+      if (snap.diagramType) setDiagramType(snap.diagramType);
+      
       setSelectedTableId(null);
       setSelectedEdgeId(null);
+      setSelectedUmlClassId(null);
+      setSelectedFlowchartNodeId(null);
       setMultiSelectedTableIds(new Set());
       setHistoryIndex(nextIdx);
       push({ title: "Redo", type: "info" });
@@ -894,28 +915,84 @@ const selectedTableRelationships = useMemo(() => {
     const rectBottom = y + h;
 
     const hits = new Set<string>();
-    for (const t of tables) {
-      const tLeft = t.x;
-      const tTop = t.y;
-      const tRight = t.x + TABLE_W;
-      const tBottom = t.y + HEADER_H + 20 + t.columns.length * 16;
+    
+    // Select elements based on current diagram type
+    if (diagramType === 'uml-class') {
+      // UML Classes
+      for (const c of umlClasses) {
+        const cLeft = c.x;
+        const cTop = c.y;
+        const cRight = c.x + 180;
+        const cBottom = c.y + 80 + c.attributes.length * 16 + c.methods.length * 16;
 
-      const intersects = !(tRight < x || tLeft > rectRight || tBottom < y || tTop > rectBottom);
-
-      if (intersects) hits.add(t.id);
-    }
-
-    setMultiSelectedTableIds((prev) => {
-      if (shiftKey) {
-        const next = new Set(prev);
-        for (const id of hits) next.add(id);
-        return next;
+        // Check if element intersects with lasso rect
+        const intersects = !(cRight < x || cLeft > rectRight || cBottom < y || cTop > rectBottom);
+        
+        // Use intersection for more intuitive selection
+        if (intersects) hits.add(c.id);
       }
-      return hits;
-    });
+      
+      setMultiSelectedTableIds((prev) => {
+        if (shiftKey) {
+          const next = new Set(prev);
+          for (const id of hits) next.add(id);
+          return next;
+        }
+        return hits;
+      });
+      const first = Array.from(hits)[0];
+      setSelectedUmlClassId(first ?? null);
+      
+    } else if (diagramType === 'flowchart') {
+      // Flowchart Nodes
+      for (const n of flowchartNodes) {
+        const nLeft = n.x;
+        const nTop = n.y;
+        const nRight = n.x + 120;
+        const nBottom = n.y + 60;
 
-    const first = Array.from(hits)[0];
-    setSelectedTableId(first ?? null);
+        const intersects = !(nRight < x || nLeft > rectRight || nBottom < y || nTop > rectBottom);
+        
+        if (intersects) hits.add(n.id);
+      }
+      
+      setMultiSelectedTableIds((prev) => {
+        if (shiftKey) {
+          const next = new Set(prev);
+          for (const id of hits) next.add(id);
+          return next;
+        }
+        return hits;
+      });
+      const first = Array.from(hits)[0];
+      setSelectedFlowchartNodeId(first ?? null);
+      
+    } else {
+      // ERD Tables
+      for (const t of tables) {
+        const tLeft = t.x;
+        const tTop = t.y;
+        const tRight = t.x + TABLE_W;
+        const tBottom = t.y + HEADER_H + 20 + t.columns.length * 16;
+
+        const intersects = !(tRight < x || tLeft > rectRight || tBottom < y || tTop > rectBottom);
+
+        if (intersects) hits.add(t.id);
+      }
+
+      setMultiSelectedTableIds((prev) => {
+        if (shiftKey) {
+          const next = new Set(prev);
+          for (const id of hits) next.add(id);
+          return next;
+        }
+        return hits;
+      });
+
+      const first = Array.from(hits)[0];
+      setSelectedTableId(first ?? null);
+    }
+    
     setSelectedEdgeId(null);
   };
 
@@ -3396,9 +3473,12 @@ const selectedTableRelationships = useMemo(() => {
         </ResizablePanel>
       </div>
 
-      {/* Minimap with collapse support */}
+      {/* Minimap with collapse support - updates based on diagram type */}
       <Minimap
         tables={tables}
+        umlClasses={umlClasses}
+        flowchartNodes={flowchartNodes}
+        diagramType={diagramType}
         viewport={viewport}
         canvasWidth={typeof window !== 'undefined' ? window.innerWidth - 380 : 1000}
         canvasHeight={typeof window !== 'undefined' ? window.innerHeight - 60 : 800}
