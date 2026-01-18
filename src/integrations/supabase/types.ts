@@ -111,6 +111,30 @@ export type Database = {
           },
         ]
       }
+      invite_attempts: {
+        Row: {
+          attempt_time: string | null
+          id: string
+          ip_address: string | null
+          success: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          attempt_time?: string | null
+          id?: string
+          ip_address?: string | null
+          success?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          attempt_time?: string | null
+          id?: string
+          ip_address?: string | null
+          success?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -145,6 +169,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      role_change_audit: {
+        Row: {
+          changed_at: string | null
+          changed_by: string
+          id: string
+          new_role: string | null
+          old_role: string | null
+          target_user_id: string
+          team_id: string
+        }
+        Insert: {
+          changed_at?: string | null
+          changed_by: string
+          id?: string
+          new_role?: string | null
+          old_role?: string | null
+          target_user_id: string
+          team_id: string
+        }
+        Update: {
+          changed_at?: string | null
+          changed_by?: string
+          id?: string
+          new_role?: string | null
+          old_role?: string | null
+          target_user_id?: string
+          team_id?: string
+        }
+        Relationships: []
       }
       team_members: {
         Row: {
@@ -186,6 +240,7 @@ export type Database = {
           created_at: string
           id: string
           invite_code: string
+          invite_code_regenerated_at: string | null
           name: string
           updated_at: string
         }
@@ -193,6 +248,7 @@ export type Database = {
           created_at?: string
           id?: string
           invite_code?: string
+          invite_code_regenerated_at?: string | null
           name: string
           updated_at?: string
         }
@@ -200,6 +256,7 @@ export type Database = {
           created_at?: string
           id?: string
           invite_code?: string
+          invite_code_regenerated_at?: string | null
           name?: string
           updated_at?: string
         }
