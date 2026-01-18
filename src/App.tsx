@@ -1878,15 +1878,28 @@ const selectedTableRelationships = useMemo(() => {
                       onClick={(e) => handleEdgeClick(e as any, r.id)}
                     />
 
-                    {/* Animated flow indicators for selected table connections */}
-                    {isAnimated && !r.isDashed && (
-                      <circle r={4} fill="#6366f1">
-                        <animateMotion
-                          dur="2s"
-                          repeatCount="indefinite"
-                          path={path}
-                        />
-                      </circle>
+                    {/* Animated flow indicators for selected table connections - works for both solid and dashed */}
+                    {isAnimated && (
+                      <>
+                        <circle r={r.isDashed ? 3 : 4} fill="#6366f1" opacity={r.isDashed ? 0.8 : 1}>
+                          <animateMotion
+                            dur={r.isDashed ? "2.5s" : "2s"}
+                            repeatCount="indefinite"
+                            path={path}
+                          />
+                        </circle>
+                        {/* Second dot for dashed lines to emphasize flow */}
+                        {r.isDashed && (
+                          <circle r={3} fill="#a78bfa" opacity={0.6}>
+                            <animateMotion
+                              dur="2.5s"
+                              repeatCount="indefinite"
+                              path={path}
+                              begin="1.25s"
+                            />
+                          </circle>
+                        )}
+                      </>
                     )}
 
                     {r.label && labelPos && (
