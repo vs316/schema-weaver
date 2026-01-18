@@ -277,6 +277,64 @@ export default function AdminPage() {
     }
   };
 
+  // Admin function to assign a user to a team
+  const handleAssignUserToTeam = async (userId: string, teamId: string, role: TeamRole = 'member') => {
+    // Check if user is already a member of this team
+    const existingMembership = teamMembers.find(m => m.user_id === userId && m.team_id === teamId);
+    
+    if (existingMembership) {
+      // Update role if already a member
+      const { error } = await supabase
+        .from('team_members')
+        .update({ role })
+        .eq('team_id', teamId)
+        .eq('user_id', userId);
+      
+      if (!error) {
+        setTeamMembers(prev => prev.map(m => 
+          m.user_id === userId && m.team_id === teamId ? { ...m, role } : m
+        ));
+      }
+      return !error;
+    } else {
+      // Add as new member
+      const { data, error } = await supabase
+        .from('team_members')
+        .insert({ team_id: teamId, user_id: userId, role })
+        .select()
+        .single();
+      
+      if (!error && data) {
+        setTeamMembers(prev => [...prev, { 
+          id: data.id, 
+          team_id: teamId, 
+          user_id: userId, 
+          role: role as TeamRole 
+        }]);
+        
+        // Also update the user's profile active team
+        await supabase
+          .from('profiles')
+          .update({ team_id: teamId })
+          .eq('id', userId);
+      }
+      return !error;
+    }
+  };
+
+  const handleRemoveUserFromTeam = async (userId: string, teamId: string) => {
+    const { error } = await supabase
+      .from('team_members')
+      .delete()
+      .eq('team_id', teamId)
+      .eq('user_id', userId);
+    
+    if (!error) {
+      setTeamMembers(prev => prev.filter(m => !(m.user_id === userId && m.team_id === teamId)));
+    }
+    return !error;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'hsl(222 47% 4%)' }}>
@@ -416,6 +474,8 @@ export default function AdminPage() {
                 teams={teams} 
                 teamMembers={teamMembers}
                 onUpdateRole={handleUpdateUserTeamRole}
+                onAssignToTeam={handleAssignUserToTeam}
+                onRemoveFromTeam={handleRemoveUserFromTeam}
                 isSuperAdmin={isSuperAdmin}
               />
             )}
@@ -538,21 +598,28 @@ function DashboardTab({ stats }: { stats: Record<string, number> }) {
   );
 }
 
-// Users Tab with role editing
+// Users Tab with role editing and team assignment
 function UsersTab({ 
   profiles, 
   teams, 
   teamMembers,
   onUpdateRole,
+  onAssignToTeam,
+  onRemoveFromTeam,
   isSuperAdmin,
 }: { 
   profiles: Profile[]; 
   teams: Team[];
   teamMembers: TeamMemberWithRole[];
   onUpdateRole: (memberId: string, teamId: string, userId: string, newRole: TeamRole) => void;
+  onAssignToTeam: (userId: string, teamId: string, role?: TeamRole) => Promise<boolean>;
+  onRemoveFromTeam: (userId: string, teamId: string) => Promise<boolean>;
   isSuperAdmin: boolean;
 }) {
   const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [assigningUser, setAssigningUser] = useState<string | null>(null);
+  const [selectedTeamToAssign, setSelectedTeamToAssign] = useState<string>('');
+  const [selectedRoleToAssign, setSelectedRoleToAssign] = useState<TeamRole>('member');
   
   const getTeamName = (teamId: string | null) => {
     if (!teamId) return 'No team';
@@ -694,17 +761,109 @@ function UsersTab({
                   </td>
                   {isSuperAdmin && (
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => setEditingUser(isEditing ? null : profile.id)}
-                        className="p-1.5 rounded hover:bg-white/10 transition-colors"
-                        title="Edit roles"
-                      >
-                        {isEditing ? (
-                          <Check size={14} style={{ color: 'hsl(142 76% 36%)' }} />
-                        ) : (
-                          <UserCog size={14} style={{ color: 'hsl(215 20% 65%)' }} />
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEditingUser(isEditing ? null : profile.id)}
+                          className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                          title="Edit roles"
+                        >
+                          {isEditing ? (
+                            <Check size={14} style={{ color: 'hsl(142 76% 36%)' }} />
+                          ) : (
+                            <UserCog size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setAssigningUser(assigningUser === profile.id ? null : profile.id)}
+                          className="p-1.5 rounded hover:bg-indigo-500/20 transition-colors"
+                          title="Assign to team"
+                        >
+                          <Plus size={14} style={{ color: 'hsl(239 84% 67%)' }} />
+                        </button>
+                      </div>
+                      {assigningUser === profile.id && (
+                        <div className="mt-2 p-2 rounded-lg space-y-2" style={{ background: 'hsl(222 47% 8%)' }}>
+                          <select
+                            value={selectedTeamToAssign}
+                            onChange={(e) => setSelectedTeamToAssign(e.target.value)}
+                            className="w-full text-xs px-2 py-1 rounded border cursor-pointer"
+                            style={{
+                              borderColor: 'hsl(217 33% 25%)',
+                              backgroundColor: 'hsl(222 47% 11%)',
+                              color: 'hsl(210 40% 98%)',
+                            }}
+                          >
+                            <option value="" style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>Select team...</option>
+                            {teams.map(t => (
+                              <option key={t.id} value={t.id} style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={selectedRoleToAssign}
+                            onChange={(e) => setSelectedRoleToAssign(e.target.value as TeamRole)}
+                            className="w-full text-xs px-2 py-1 rounded border cursor-pointer"
+                            style={{
+                              borderColor: 'hsl(217 33% 25%)',
+                              backgroundColor: 'hsl(222 47% 11%)',
+                              color: 'hsl(210 40% 98%)',
+                            }}
+                          >
+                            {ROLE_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value} style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={async () => {
+                                if (selectedTeamToAssign) {
+                                  const success = await onAssignToTeam(profile.id, selectedTeamToAssign, selectedRoleToAssign);
+                                  if (success) {
+                                    setAssigningUser(null);
+                                    setSelectedTeamToAssign('');
+                                    setSelectedRoleToAssign('member');
+                                  }
+                                }
+                              }}
+                              disabled={!selectedTeamToAssign}
+                              className="flex-1 text-xs px-2 py-1 rounded font-medium disabled:opacity-50"
+                              style={{ background: 'hsl(239 84% 67%)', color: 'white' }}
+                            >
+                              Assign
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAssigningUser(null);
+                                setSelectedTeamToAssign('');
+                              }}
+                              className="text-xs px-2 py-1 rounded"
+                              style={{ color: 'hsl(215 20% 65%)' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {/* Show option to remove from existing teams */}
+                          {memberships.length > 0 && (
+                            <div className="pt-2 border-t" style={{ borderColor: 'hsl(217 33% 17%)' }}>
+                              <p className="text-[10px] uppercase mb-1" style={{ color: 'hsl(215 20% 45%)' }}>Remove from:</p>
+                              {memberships.map(m => (
+                                <button
+                                  key={m.id}
+                                  onClick={() => onRemoveFromTeam(profile.id, m.team_id)}
+                                  className="w-full text-left text-xs px-2 py-1 rounded hover:bg-red-500/10 flex items-center justify-between"
+                                  style={{ color: 'hsl(0 84% 60%)' }}
+                                >
+                                  <span>{teams.find(t => t.id === m.team_id)?.name || 'Unknown'}</span>
+                                  <Trash2 size={10} />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                   )}
                 </tr>

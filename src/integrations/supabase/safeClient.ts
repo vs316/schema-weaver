@@ -41,15 +41,33 @@ export function getResolvedBackendConfig(): ResolvedBackendConfig {
 }
 
 
-const cfg = getResolvedBackendConfig();
-if (!cfg.url || !cfg.publishableKey) {
-  throw new Error("Supabase configuration missing");
+let supabaseInstance: ReturnType<typeof createClient<Database>> | null = null;
+
+function initializeSupabase() {
+  if (supabaseInstance) return supabaseInstance;
+  
+  const cfg = getResolvedBackendConfig();
+  if (!cfg.url || !cfg.publishableKey) {
+    console.error("Supabase configuration missing - using fallbacks");
+    // Use fallbacks instead of throwing
+    supabaseInstance = createClient<Database>(FALLBACK_URL, FALLBACK_PUBLISHABLE_KEY, {
+      auth: {
+        storage: localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+  } else {
+    supabaseInstance = createClient<Database>(cfg.url, cfg.publishableKey, {
+      auth: {
+        storage: localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+  }
+  
+  return supabaseInstance;
 }
 
-export const supabase = createClient<Database>(cfg.url, cfg.publishableKey, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const supabase = initializeSupabase();

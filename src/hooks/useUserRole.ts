@@ -41,13 +41,27 @@ export function useUserRole(teamId: string | null) {
     fetchRole();
   }, [fetchRole]);
 
-  // reader and viewer can ONLY add notes/questions/changes/fixes/comments - no table/column edits
+  // Readers and viewers can ONLY add notes/questions/changes/fixes/comments - no table/column edits
+  // They also cannot unlock diagrams or import JSON
   const canEdit = role !== null && !['reader', 'viewer'].includes(role);
+  
   // canAddMetadata - for readers who can add notes, questions, changes, fixes, comments
   const canAddMetadata = role !== null && role !== 'viewer';
+  
+  // canManage - team management permissions
   const canManage = role !== null && ['owner', 'admin', 'member'].includes(role);
+  
+  // canDelete - ability to delete diagrams and manage teams
   const canDelete = role !== null && ['owner', 'admin'].includes(role);
+  
+  // canUnlock - ability to unlock locked diagrams (only non-readers/viewers)
+  const canUnlock = role !== null && !['reader', 'viewer'].includes(role);
+  
+  // canImport - ability to import JSON schemas
+  const canImport = role !== null && !['reader', 'viewer'].includes(role);
+  
   const isOwner = role === 'owner';
+  const isReaderOrViewer = role !== null && ['reader', 'viewer'].includes(role);
 
   return {
     role,
@@ -56,7 +70,10 @@ export function useUserRole(teamId: string | null) {
     canAddMetadata,
     canManage,
     canDelete,
+    canUnlock,
+    canImport,
     isOwner,
+    isReaderOrViewer,
     refetch: fetchRole,
   };
 }

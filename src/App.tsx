@@ -37,9 +37,11 @@ import {
   HelpCircle,
   GitCommit,
   Wrench,
+  ExternalLink,
 } from "lucide-react";
 
 import { CollapsibleSection } from "./components/CollapsibleSection";
+import { ResizablePanel } from "./components/ResizablePanel";
 import { useUserRole } from "./hooks/useUserRole";
 import { useRealTimeNotifications } from "./hooks/useRealTimeNotifications";
 import { RealTimeNotification } from "./components/RealTimeNotification";
@@ -257,8 +259,12 @@ const { notifications, dismiss: dismissNotification, dismissAll: dismissAllNotif
 
 // Feature 9: Collapsible minimap and resizable sidebar
 const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
-// Sidebar width can be used for resizable sidebar feature
-// const [sidebarWidth, setSidebarWidth] = useState(320);
+
+// Feature 10: Sidebar as popup modal
+const [_isSidebarPopup, _setIsSidebarPopup] = useState(false);
+
+// Auto-lock for readers/viewers - they cannot unlock
+const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -624,9 +630,9 @@ const selectedTableRelationships = useMemo(() => {
   const isEdgeConnected = (id: string) => connected.connectedEdgeIds.has(id);
 
   const handleTableMouseDown = (e: React.MouseEvent, tableId: string) => {
-    // Check if locked - still allow selection but not dragging
-    if (isLocked) {
-      // Allow selection in locked mode
+    // Check if locked (including reader auto-lock) - still allow selection but not dragging
+    if (effectiveIsLocked) {
+      // Allow selection in locked mode for analysis
       if (!e.shiftKey) {
         setMultiSelectedTableIds(new Set());
         setSelectedTableId(tableId);
@@ -1396,7 +1402,7 @@ const selectedTableRelationships = useMemo(() => {
           return; // Allow normal backspace behavior in inputs
         }
         
-        if (isLocked) {
+        if (effectiveIsLocked) {
           push({ title: "Diagram is locked", type: "info" });
           return;
         }
@@ -1587,8 +1593,14 @@ const selectedTableRelationships = useMemo(() => {
             <Redo2 size={16} />
           </button> */}
           {/* Feature 1: Lock/Unlock Button */}
+{/* Lock/Unlock Button - disabled for readers/viewers */}
 <button
   onClick={() => {
+    // Readers/viewers cannot unlock
+    if (userRole.isReaderOrViewer) {
+      push({ title: "Readers cannot unlock diagrams", type: "info" });
+      return;
+    }
     const newLockState = !isLocked;
     setIsLocked(newLockState);
     onSave({ is_locked: newLockState } as any);
@@ -1599,16 +1611,19 @@ const selectedTableRelationships = useMemo(() => {
       type: "info"
     });
   }}
-  title={isLocked ? "Unlock diagram (Ctrl/Cmd+L)" : "Lock diagram (Ctrl/Cmd+L)"}
+  disabled={userRole.isReaderOrViewer && !isLocked}
+  title={userRole.isReaderOrViewer 
+    ? "Readers cannot modify lock state" 
+    : (isLocked ? "Unlock diagram (Ctrl/Cmd+L)" : "Lock diagram (Ctrl/Cmd+L)")}
   className={`p-2 rounded-lg transition-all ${
-    isLocked
+    effectiveIsLocked
       ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
       : isDarkMode
       ? "hover:bg-slate-800 text-slate-300"
       : "hover:bg-slate-200 text-slate-700"
-  }`}
+  } ${userRole.isReaderOrViewer ? "opacity-60 cursor-not-allowed" : ""}`}
 >
-  {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
+  {effectiveIsLocked ? <Lock size={16} /> : <Unlock size={16} />}
 </button>
 
 {/* Fullscreen Toggle Button */}
@@ -1720,10 +1735,21 @@ const selectedTableRelationships = useMemo(() => {
             <Save size={20} />
           </button>
 
-          <label className="p-2.5 hover:bg-blue-500/15 rounded-xl text-blue-500 cursor-pointer transition-all duration-200 active:scale-95 hover:scale-110 inline-block" title="Import Schema">
-            <Upload size={20} />
-            <input type="file" className="hidden" onChange={importJSON} accept=".json" />
-          </label>
+          {/* Import JSON - disabled for readers/viewers */}
+          {userRole.canImport ? (
+            <label className="p-2.5 hover:bg-blue-500/15 rounded-xl text-blue-500 cursor-pointer transition-all duration-200 active:scale-95 hover:scale-110 inline-block" title="Import Schema">
+              <Upload size={20} />
+              <input type="file" className="hidden" onChange={importJSON} accept=".json" />
+            </label>
+          ) : (
+            <button 
+              className="p-2.5 rounded-xl text-slate-500 opacity-50 cursor-not-allowed" 
+              title="Readers cannot import schemas"
+              disabled
+            >
+              <Upload size={20} />
+            </button>
+          )}
 
           <button onClick={exportPNG} title="Export PNG Image" className="p-2.5 hover:bg-purple-500/15 rounded-xl text-purple-500 transition-all duration-200 active:scale-95 hover:scale-110">
             <Download size={20} />
@@ -2086,17 +2112,23 @@ const selectedTableRelationships = useMemo(() => {
           )} */}
         </div>
 
-        {/* EDITOR SIDEBAR - expands when minimap is collapsed */}
-        <div
+        {/* EDITOR SIDEBAR - Resizable with popup modal option */}
+        <ResizablePanel
+          defaultWidth={320}
+          minWidth={280}
+          maxWidth={600}
+          isOpen={isSidebarOpen}
+          isDarkMode={isDarkMode}
+          side="right"
           className={`border-l shadow-2xl z-30 flex flex-col transition-all duration-300 overflow-hidden ${
-            isSidebarOpen ? "w-80" : "w-0"
-          } ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"}`}
+            isDarkMode ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"
+          }`}
           style={{ 
             marginTop: isMinimapCollapsed ? '56px' : '120px', 
             height: isMinimapCollapsed ? 'calc(100% - 56px)' : 'calc(100% - 120px)' 
           }}
         >
-          {/* Header with toggle button */}
+          {/* Header with toggle and popup buttons */}
           <div
             className={`p-4 border-b flex items-center justify-between whitespace-nowrap transition-colors duration-300 ${
               isDarkMode ? "border-slate-800" : "border-slate-200"
@@ -2108,6 +2140,13 @@ const selectedTableRelationships = useMemo(() => {
             <div className="flex items-center gap-2">
               <span className="text-[9px] font-bold opacity-40 uppercase">Saved</span>
               <span className="text-[10px] font-mono text-indigo-400">{lastSaved || "..."}</span>
+              <button
+                onClick={() => _setIsSidebarPopup(true)}
+                className="p-1 hover:bg-slate-800/50 rounded text-slate-400 hover:text-slate-200 flex-shrink-0"
+                title="Open in popup modal"
+              >
+                <ExternalLink size={14} />
+              </button>
               <button
                 onClick={() => setIsSidebarOpen(false)}
                 className="p-1 hover:bg-slate-800/50 rounded text-slate-400 hover:text-slate-200 flex-shrink-0"
@@ -2899,7 +2938,7 @@ const selectedTableRelationships = useMemo(() => {
               </button>
             </div>
           </div>
-        </div>
+        </ResizablePanel>
       </div>
 
       {/* Minimap with collapse support */}
