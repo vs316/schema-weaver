@@ -14,12 +14,16 @@ import {
   Check,
   X,
   Shield,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
 import { DiagramPreview } from './DiagramPreview';
 import { TeamWorkspaceSwitcher } from './TeamWorkspaceSwitcher';
 import { supabase } from '../integrations/supabase/safeClient';
+
+const THEME_KEY = "erd-theme";
 
 interface DiagramSelectorProps {
   diagrams: ERDDiagram[];
@@ -50,9 +54,27 @@ export function DiagramSelector({
   const [showTeamSettings, setShowTeamSettings] = useState(false);
   const [editingDiagramId, setEditingDiagramId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
-  const [hoveredDiagramId, setHoveredDiagramId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(THEME_KEY);
+      return stored !== "light";
+    }
+    return true;
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.remove("light");
+      root.classList.add("dark");
+    } else {
+      root.classList.add("light");
+      root.classList.remove("dark");
+    }
+    localStorage.setItem(THEME_KEY, isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
 
   useEffect(() => {
     // Check if user is admin
@@ -149,17 +171,17 @@ export function DiagramSelector({
   }
 
   return (
-    <div className="min-h-screen p-6" style={{ background: 'hsl(222 47% 4%)' }}>
+    <div className="min-h-screen p-6 transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(222 47% 4%)' : 'hsl(0 0% 96%)' }}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-3" style={{ color: 'hsl(210 40% 98%)' }}>
+              <h1 className="text-2xl font-bold flex items-center gap-3 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                 <Cloud size={28} style={{ color: 'hsl(239 84% 67%)' }} />
                 Your Diagrams
               </h1>
-              <p className="mt-1 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+              <p className="mt-1 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                 Select a diagram to continue or create a new one
               </p>
             </div>
@@ -191,6 +213,17 @@ export function DiagramSelector({
               </button>
             )}
 
+            {/* Theme Toggle */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`p-2.5 rounded-lg transition-all ${
+                isDarkMode ? "hover:bg-white/5 text-slate-400" : "hover:bg-slate-200 text-slate-600"
+              }`}
+              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
             {/* New Diagram Button */}
             <button
               onClick={onCreate}
@@ -221,14 +254,14 @@ export function DiagramSelector({
         {/* Diagrams Grid */}
         {diagrams.length === 0 ? (
           <div 
-            className="flex flex-col items-center justify-center py-20 rounded-2xl border-2 border-dashed"
-            style={{ borderColor: 'hsl(217 33% 17%)' }}
+            className="flex flex-col items-center justify-center py-20 rounded-2xl border-2 border-dashed transition-colors duration-300"
+            style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
           >
-            <FolderOpen size={48} className="mb-4" style={{ color: 'hsl(217 33% 25%)' }} />
-            <h2 className="text-lg font-semibold mb-2" style={{ color: 'hsl(210 40% 98%)' }}>
+            <FolderOpen size={48} className="mb-4" style={{ color: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(215 16% 47%)' }} />
+            <h2 className="text-lg font-semibold mb-2 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
               No diagrams yet
             </h2>
-            <p className="text-sm mb-6" style={{ color: 'hsl(215 20% 65%)' }}>
+            <p className="text-sm mb-6 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
               Create your first diagram to get started
             </p>
             <button
@@ -255,31 +288,21 @@ export function DiagramSelector({
                   exit={{ opacity: 0, scale: 0.95 }}
                   className="group relative rounded-xl border cursor-pointer transition-all duration-200 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/10"
                   style={{
-                    background: 'hsl(222 47% 6%)',
-                    borderColor: 'hsl(217 33% 17%)',
+                    background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+                    borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
                   }}
                   onClick={() => !editingDiagramId && onSelect(diagram)}
-                  onMouseEnter={() => setHoveredDiagramId(diagram.id)}
-                  onMouseLeave={() => setHoveredDiagramId(null)}
                 >
                   {/* Preview area with diagram preview on hover */}
                   <div 
-                    className="h-32 rounded-t-xl flex items-center justify-center overflow-hidden relative"
-                    style={{ background: 'hsl(222 47% 8%)' }}
+                    className="h-32 rounded-t-xl flex items-center justify-center overflow-hidden relative transition-colors duration-300"
+                    style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 96%)' }}
                   >
-                    {hoveredDiagramId === diagram.id ? (
-                      <DiagramPreview 
-                        tables={diagram.tables} 
-                        relations={diagram.relations}
-                        isDarkMode={true}
-                      />
-                    ) : (
-                      <DiagramPreview 
-                        tables={diagram.tables} 
-                        relations={diagram.relations}
-                        isDarkMode={true}
-                      />
-                    )}
+                    <DiagramPreview 
+                      tables={diagram.tables} 
+                      relations={diagram.relations}
+                      isDarkMode={isDarkMode}
+                    />
                   </div>
 
                   {/* Info */}
@@ -290,11 +313,11 @@ export function DiagramSelector({
                           type="text"
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
-                          className="flex-1 px-2 py-1 rounded text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="flex-1 px-2 py-1 rounded text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-300"
                           style={{
-                            background: 'hsl(222 47% 8%)',
-                            borderColor: 'hsl(217 33% 25%)',
-                            color: 'hsl(210 40% 98%)',
+                            background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+                            borderColor: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(220 13% 91%)',
+                            color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
                           }}
                           autoFocus
                           onKeyDown={(e) => {
@@ -324,7 +347,7 @@ export function DiagramSelector({
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold truncate flex-1" style={{ color: 'hsl(210 40% 98%)' }}>
+                        <h3 className="font-semibold truncate flex-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                           {diagram.name}
                         </h3>
                         <button
@@ -333,15 +356,15 @@ export function DiagramSelector({
                             setEditName(diagram.name);
                             setEditingDiagramId(diagram.id);
                           }}
-                          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-700 transition-all"
+                          className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
                           title="Rename diagram"
                         >
-                          <Edit2 size={12} style={{ color: 'hsl(215 20% 65%)' }} />
+                          <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
                         </button>
                       </div>
                     )}
                     
-                    <div className="mt-2 flex items-center gap-4 text-xs" style={{ color: 'hsl(215 20% 65%)' }}>
+                    <div className="mt-2 flex items-center gap-4 text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                       <span className="flex items-center gap-1">
                         <Clock size={12} />
                         {formatDate(diagram.updated_at)}
@@ -352,11 +375,11 @@ export function DiagramSelector({
                       </span>
                     </div>
 
-                    <div className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'hsl(215 20% 65%)' }}>
-                      <span className="px-2 py-1 rounded" style={{ background: 'hsl(217 33% 17%)' }}>
+                    <div className="mt-3 flex items-center gap-2 text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
+                      <span className="px-2 py-1 rounded transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
                         {(diagram.tables as unknown[])?.length || 0} tables
                       </span>
-                      <span className="px-2 py-1 rounded" style={{ background: 'hsl(217 33% 17%)' }}>
+                      <span className="px-2 py-1 rounded transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
                         {(diagram.relations as unknown[])?.length || 0} relations
                       </span>
                     </div>

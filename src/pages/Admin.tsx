@@ -380,18 +380,21 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'hsl(222 47% 4%)' }}>
+    <div 
+      className="min-h-screen flex transition-colors duration-300" 
+      style={{ background: isDarkMode ? 'hsl(222 47% 4%)' : 'hsl(0 0% 96%)' }}
+    >
       {/* Sidebar */}
       <motion.aside
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        className="w-64 border-r flex flex-col"
+        className="w-64 border-r flex flex-col transition-colors duration-300"
         style={{ 
-          background: 'hsl(222 47% 6%)',
-          borderColor: 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+          borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
       >
-        <div className="p-4 border-b" style={{ borderColor: 'hsl(217 33% 17%)' }}>
+        <div className="p-4 border-b transition-colors duration-300" style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
           <div className="flex items-center gap-3">
             <div 
               className="w-10 h-10 rounded-lg flex items-center justify-center"
@@ -400,8 +403,8 @@ export default function AdminPage() {
               <Shield size={20} style={{ color: 'hsl(239 84% 67%)' }} />
             </div>
             <div>
-              <h1 className="font-bold" style={{ color: 'hsl(210 40% 98%)' }}>Admin Panel</h1>
-              <p className="text-xs" style={{ color: 'hsl(215 20% 65%)' }}>
+              <h1 className="font-bold transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>Admin Panel</h1>
+              <p className="text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                 {isSuperAdmin ? 'Super Admin' : 'Admin'}
               </p>
             </div>
@@ -418,7 +421,7 @@ export default function AdminPage() {
               }`}
               style={{
                 background: activeTab === tab.id ? 'hsl(239 84% 67%)' : 'transparent',
-                color: activeTab === tab.id ? 'white' : 'hsl(215 20% 65%)',
+                color: activeTab === tab.id ? 'white' : isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)',
               }}
             >
               {tab.icon}
@@ -427,11 +430,11 @@ export default function AdminPage() {
           ))}
         </nav>
 
-        <div className="p-4 border-t" style={{ borderColor: 'hsl(217 33% 17%)' }}>
+        <div className="p-4 border-t transition-colors duration-300" style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
           <button
             onClick={() => navigate('/')}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-white/5"
-            style={{ color: 'hsl(215 20% 65%)' }}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
+            style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
           >
             <ArrowLeft size={16} />
             Back to App
@@ -443,11 +446,11 @@ export default function AdminPage() {
       <main className="flex-1 overflow-hidden flex flex-col">
         {/* Header */}
         <header 
-          className="px-6 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: 'hsl(217 33% 17%)' }}
+          className="px-6 py-4 border-b flex items-center justify-between transition-colors duration-300"
+          style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
         >
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold" style={{ color: 'hsl(210 40% 98%)' }}>
+            <h2 className="text-xl font-bold transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
               {tabs.find(t => t.id === activeTab)?.label}
             </h2>
           </div>
@@ -455,17 +458,17 @@ export default function AdminPage() {
           <div className="flex items-center gap-3">
             {activeTab !== 'dashboard' && (
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'hsl(215 20% 45%)' }} />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: isDarkMode ? 'hsl(215 20% 45%)' : 'hsl(215 16% 47%)' }} />
                 <input
                   type="text"
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 rounded-lg text-sm w-64 border focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="pl-9 pr-4 py-2 rounded-lg text-sm w-64 border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-300"
                   style={{
-                    background: 'hsl(222 47% 8%)',
-                    borderColor: 'hsl(217 33% 20%)',
-                    color: 'hsl(210 40% 98%)',
+                    background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+                    borderColor: isDarkMode ? 'hsl(217 33% 20%)' : 'hsl(220 13% 91%)',
+                    color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
                   }}
                 />
               </div>
@@ -485,12 +488,12 @@ export default function AdminPage() {
             <button
               onClick={loadAllData}
               disabled={refreshing}
-              className="p-2 rounded-lg transition-colors hover:bg-white/5"
+              className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
             >
               <RefreshCw 
                 size={18} 
                 className={refreshing ? 'animate-spin' : ''} 
-                style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 20% 45%)' }} 
+                style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} 
               />
             </button>
           </div>
