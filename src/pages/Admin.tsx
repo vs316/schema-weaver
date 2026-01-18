@@ -503,7 +503,7 @@ export default function AdminPage() {
         <div className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
-              <DashboardTab key="dashboard" stats={stats} />
+              <DashboardTab key="dashboard" stats={stats} isDarkMode={isDarkMode} />
             )}
             {activeTab === 'users' && (
               <UsersTab 
@@ -515,6 +515,7 @@ export default function AdminPage() {
                 onAssignToTeam={handleAssignUserToTeam}
                 onRemoveFromTeam={handleRemoveUserFromTeam}
                 isSuperAdmin={isSuperAdmin}
+                isDarkMode={isDarkMode}
               />
             )}
             {activeTab === 'diagrams' && (
@@ -523,6 +524,7 @@ export default function AdminPage() {
                 diagrams={filteredDiagrams} 
                 teams={teams}
                 onDelete={handleDeleteDiagram}
+                isDarkMode={isDarkMode}
               />
             )}
             {activeTab === 'teams' && (
@@ -530,6 +532,7 @@ export default function AdminPage() {
                 key="teams" 
                 teams={filteredTeams}
                 onDelete={handleDeleteTeam}
+                isDarkMode={isDarkMode}
               />
             )}
             {activeTab === 'admins' && (
@@ -541,6 +544,7 @@ export default function AdminPage() {
                 onAdd={handleAddAdmin}
                 onRemove={handleRemoveAdmin}
                 onToggleStatus={handleToggleAdminStatus}
+                isDarkMode={isDarkMode}
               />
             )}
           </AnimatePresence>
@@ -551,7 +555,7 @@ export default function AdminPage() {
 }
 
 // Dashboard Tab
-function DashboardTab({ stats }: { stats: Record<string, number> }) {
+function DashboardTab({ stats, isDarkMode }: { stats: Record<string, number>; isDarkMode: boolean }) {
   const statCards = [
     { label: 'Total Users', value: stats.totalUsers, icon: <Users size={24} />, color: 'hsl(239 84% 67%)' },
     { label: 'Total Teams', value: stats.totalTeams, icon: <Building2 size={24} />, color: 'hsl(142 76% 36%)' },
@@ -574,10 +578,10 @@ function DashboardTab({ stats }: { stats: Record<string, number> }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="p-5 rounded-xl border"
+            className="p-5 rounded-xl border transition-colors duration-300"
             style={{
-              background: 'hsl(222 47% 6%)',
-              borderColor: 'hsl(217 33% 17%)',
+              background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+              borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
             }}
           >
             <div className="flex items-center justify-between mb-3">
@@ -589,10 +593,10 @@ function DashboardTab({ stats }: { stats: Record<string, number> }) {
               </div>
               <TrendingUp size={16} style={{ color: 'hsl(142 76% 36%)' }} />
             </div>
-            <p className="text-2xl font-bold" style={{ color: 'hsl(210 40% 98%)' }}>
+            <p className="text-2xl font-bold transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
               {stat.value}
             </p>
-            <p className="text-sm mt-1" style={{ color: 'hsl(215 20% 65%)' }}>
+            <p className="text-sm mt-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
               {stat.label}
             </p>
           </motion.div>
@@ -601,32 +605,32 @@ function DashboardTab({ stats }: { stats: Record<string, number> }) {
 
       {/* Quick Stats */}
       <div 
-        className="p-6 rounded-xl border"
+        className="p-6 rounded-xl border transition-colors duration-300"
         style={{
-          background: 'hsl(222 47% 6%)',
-          borderColor: 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+          borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
       >
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 size={20} style={{ color: 'hsl(239 84% 67%)' }} />
-          <h3 className="font-semibold" style={{ color: 'hsl(210 40% 98%)' }}>Platform Overview</h3>
+          <h3 className="font-semibold transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>Platform Overview</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <p className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>Avg Tables per Diagram</p>
-            <p className="text-xl font-bold mt-1" style={{ color: 'hsl(210 40% 98%)' }}>
+            <p className="text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Avg Tables per Diagram</p>
+            <p className="text-xl font-bold mt-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
               {stats.totalDiagrams > 0 ? '~5.2' : '0'}
             </p>
           </div>
           <div>
-            <p className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>Active Admins</p>
-            <p className="text-xl font-bold mt-1" style={{ color: 'hsl(210 40% 98%)' }}>
+            <p className="text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Active Admins</p>
+            <p className="text-xl font-bold mt-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
               {stats.totalAdmins}
             </p>
           </div>
           <div>
-            <p className="text-sm" style={{ color: 'hsl(215 20% 65%)' }}>Avg Members per Team</p>
-            <p className="text-xl font-bold mt-1" style={{ color: 'hsl(210 40% 98%)' }}>
+            <p className="text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Avg Members per Team</p>
+            <p className="text-xl font-bold mt-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
               {stats.totalTeams > 0 ? (stats.totalUsers / stats.totalTeams).toFixed(1) : '0'}
             </p>
           </div>
@@ -645,6 +649,7 @@ function UsersTab({
   onAssignToTeam,
   onRemoveFromTeam,
   isSuperAdmin,
+  isDarkMode,
 }: { 
   profiles: Profile[]; 
   teams: Team[];
@@ -653,6 +658,7 @@ function UsersTab({
   onAssignToTeam: (userId: string, teamId: string, role?: TeamRole) => Promise<boolean>;
   onRemoveFromTeam: (userId: string, teamId: string) => Promise<boolean>;
   isSuperAdmin: boolean;
+  isDarkMode: boolean;
 }) {
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [assigningUser, setAssigningUser] = useState<string | null>(null);
@@ -675,22 +681,22 @@ function UsersTab({
       exit={{ opacity: 0, y: -20 }}
     >
       <div 
-        className="rounded-xl border overflow-hidden"
+        className="rounded-xl border overflow-hidden transition-colors duration-300"
         style={{
-          background: 'hsl(222 47% 6%)',
-          borderColor: 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+          borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
       >
         <table className="w-full">
           <thead>
-            <tr style={{ background: 'hsl(222 47% 8%)' }}>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>User</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Email</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Current Team</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Team Roles</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Joined</th>
+            <tr style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(220 14% 96%)' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>User</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Email</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Current Team</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Team Roles</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Joined</th>
               {isSuperAdmin && (
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Actions</th>
               )}
             </tr>
           </thead>
@@ -702,8 +708,8 @@ function UsersTab({
               return (
                 <tr 
                   key={profile.id}
-                  className="border-t transition-colors hover:bg-white/5"
-                  style={{ borderColor: 'hsl(217 33% 17%)' }}
+                  className={`border-t transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}
+                  style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -713,20 +719,20 @@ function UsersTab({
                       >
                         {(profile.display_name || profile.email || 'U')[0].toUpperCase()}
                       </div>
-                      <span className="font-medium" style={{ color: 'hsl(210 40% 98%)' }}>
+                      <span className="font-medium transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                         {profile.display_name || 'No name'}
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                  <td className="px-4 py-3 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                     {profile.email || 'N/A'}
                   </td>
                   <td className="px-4 py-3">
                     <span 
-                      className="px-2 py-1 rounded text-xs"
+                      className="px-2 py-1 rounded text-xs transition-colors duration-300"
                       style={{ 
-                        background: 'hsl(217 33% 17%)',
-                        color: 'hsl(210 40% 98%)',
+                        background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 14% 96%)',
+                        color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
                       }}
                     >
                       {getTeamName(profile.team_id)}
@@ -737,24 +743,24 @@ function UsersTab({
                       <div className="space-y-2 max-w-xs">
                         {memberships.map(m => (
                           <div key={m.id} className="flex items-center gap-2">
-                            <span className="text-xs truncate" style={{ color: 'hsl(215 20% 65%)' }}>
+                            <span className="text-xs truncate transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                               {teams.find(t => t.id === m.team_id)?.name || 'Unknown'}:
                             </span>
                             <select
                               value={m.role}
                               onChange={(e) => onUpdateRole(m.id, m.team_id, m.user_id, e.target.value as TeamRole)}
-                              className="text-xs px-2 py-1 rounded border cursor-pointer"
+                              className="text-xs px-2 py-1 rounded border cursor-pointer transition-colors duration-300"
                               style={{
-                                borderColor: 'hsl(217 33% 25%)',
-                                backgroundColor: 'hsl(222 47% 11%)',
-                                color: 'hsl(210 40% 98%)',
+                                borderColor: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(220 13% 91%)',
+                                backgroundColor: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)',
+                                color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
                               }}
                             >
                               {ROLE_OPTIONS.map(opt => (
                                 <option 
                                   key={opt.value} 
                                   value={opt.value}
-                                  style={{ backgroundColor: 'hsl(222 47% 11%)', color: 'hsl(210 40% 98%)' }}
+                                  style={{ backgroundColor: isDarkMode ? 'hsl(222 47% 11%)' : 'hsl(0 0% 100%)', color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
                                 >
                                   {opt.label}
                                 </option>
@@ -925,10 +931,12 @@ function DiagramsTab({
   diagrams, 
   teams,
   onDelete,
+  isDarkMode,
 }: { 
   diagrams: Diagram[]; 
   teams: Team[];
   onDelete: (id: string) => void;
+  isDarkMode: boolean;
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   
@@ -944,33 +952,33 @@ function DiagramsTab({
       exit={{ opacity: 0, y: -20 }}
     >
       <div 
-        className="rounded-xl border overflow-hidden"
+        className="rounded-xl border overflow-hidden transition-colors duration-300"
         style={{
-          background: 'hsl(222 47% 6%)',
-          borderColor: 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+          borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
       >
         <table className="w-full">
           <thead>
-            <tr style={{ background: 'hsl(222 47% 8%)' }}>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Team</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Tables</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Updated</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Actions</th>
+            <tr style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(220 14% 96%)' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Name</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Team</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Tables</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Updated</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {diagrams.map((diagram) => (
               <tr 
                 key={diagram.id}
-                className="border-t transition-colors hover:bg-white/5"
-                style={{ borderColor: 'hsl(217 33% 17%)' }}
+                className={`border-t transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}
+                style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Database size={16} style={{ color: 'hsl(239 84% 67%)' }} />
-                    <span className="font-medium" style={{ color: 'hsl(210 40% 98%)' }}>
+                    <span className="font-medium transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                       {diagram.name}
                     </span>
                     {diagram.is_locked && (
@@ -980,19 +988,19 @@ function DiagramsTab({
                 </td>
                 <td className="px-4 py-3">
                   <span 
-                    className="px-2 py-1 rounded text-xs"
+                    className="px-2 py-1 rounded text-xs transition-colors duration-300"
                     style={{ 
-                      background: 'hsl(217 33% 17%)',
-                      color: 'hsl(210 40% 98%)',
+                      background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 14% 96%)',
+                      color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
                     }}
                   >
                     {getTeamName(diagram.team_id)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                <td className="px-4 py-3 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                   {(diagram.tables as unknown[])?.length || 0}
                 </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                <td className="px-4 py-3 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                   {new Date(diagram.updated_at).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3">
@@ -1006,9 +1014,9 @@ function DiagramsTab({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="p-1.5 rounded hover:bg-white/10"
+                        className={`p-1.5 rounded ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
                       >
-                        <X size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+                        <X size={14} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
                       </button>
                     </div>
                   ) : (
@@ -1026,7 +1034,7 @@ function DiagramsTab({
         </table>
         
         {diagrams.length === 0 && (
-          <div className="p-8 text-center" style={{ color: 'hsl(215 20% 65%)' }}>
+          <div className="p-8 text-center transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
             No diagrams found
           </div>
         )}
@@ -1039,9 +1047,11 @@ function DiagramsTab({
 function TeamsTab({ 
   teams,
   onDelete,
+  isDarkMode,
 }: { 
   teams: Team[];
   onDelete: (id: string) => void;
+  isDarkMode: boolean;
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -1052,52 +1062,52 @@ function TeamsTab({
       exit={{ opacity: 0, y: -20 }}
     >
       <div 
-        className="rounded-xl border overflow-hidden"
+        className="rounded-xl border overflow-hidden transition-colors duration-300"
         style={{
-          background: 'hsl(222 47% 6%)',
-          borderColor: 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+          borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
       >
         <table className="w-full">
           <thead>
-            <tr style={{ background: 'hsl(222 47% 8%)' }}>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Team</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Invite Code</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Members</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Created</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Actions</th>
+            <tr style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(220 14% 96%)' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Team</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Invite Code</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Members</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Created</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {teams.map((team) => (
               <tr 
                 key={team.id}
-                className="border-t transition-colors hover:bg-white/5"
-                style={{ borderColor: 'hsl(217 33% 17%)' }}
+                className={`border-t transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}
+                style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Building2 size={16} style={{ color: 'hsl(142 76% 36%)' }} />
-                    <span className="font-medium" style={{ color: 'hsl(210 40% 98%)' }}>
+                    <span className="font-medium transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                       {team.name}
                     </span>
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <code 
-                    className="px-2 py-1 rounded text-xs font-mono"
+                    className="px-2 py-1 rounded text-xs font-mono transition-colors duration-300"
                     style={{ 
-                      background: 'hsl(217 33% 17%)',
+                      background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 14% 96%)',
                       color: 'hsl(239 84% 67%)',
                     }}
                   >
                     {team.invite_code}
                   </code>
                 </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                <td className="px-4 py-3 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                   {team.member_count || 0}
                 </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                <td className="px-4 py-3 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                   {new Date(team.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3">
@@ -1111,9 +1121,9 @@ function TeamsTab({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="p-1.5 rounded hover:bg-white/10"
+                        className={`p-1.5 rounded ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
                       >
-                        <X size={14} style={{ color: 'hsl(215 20% 65%)' }} />
+                        <X size={14} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
                       </button>
                     </div>
                   ) : (
@@ -1131,7 +1141,7 @@ function TeamsTab({
         </table>
         
         {teams.length === 0 && (
-          <div className="p-8 text-center" style={{ color: 'hsl(215 20% 65%)' }}>
+          <div className="p-8 text-center transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
             No teams found
           </div>
         )}
@@ -1148,6 +1158,7 @@ function AdminsTab({
   onAdd,
   onRemove,
   onToggleStatus,
+  isDarkMode,
 }: { 
   admins: AdminUser[];
   isSuperAdmin: boolean;
@@ -1155,6 +1166,7 @@ function AdminsTab({
   onAdd: (email: string) => void;
   onRemove: (userId: string) => void;
   onToggleStatus: (adminId: string, userId: string, currentRole: 'super_admin' | 'admin') => void;
+  isDarkMode: boolean;
 }) {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -1183,11 +1195,11 @@ function AdminsTab({
                 placeholder="admin@example.com"
                 value={newAdminEmail}
                 onChange={(e) => setNewAdminEmail(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="px-3 py-2 rounded-lg text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-300"
                 style={{
-                  background: 'hsl(222 47% 8%)',
-                  borderColor: 'hsl(217 33% 20%)',
-                  color: 'hsl(210 40% 98%)',
+                  background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+                  borderColor: isDarkMode ? 'hsl(217 33% 20%)' : 'hsl(220 13% 91%)',
+                  color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               />
@@ -1199,9 +1211,9 @@ function AdminsTab({
               </button>
               <button
                 onClick={() => setShowAddForm(false)}
-                className="p-2 rounded-lg hover:bg-white/10"
+                className={`p-2 rounded-lg ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
               >
-                <X size={18} style={{ color: 'hsl(215 20% 65%)' }} />
+                <X size={18} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
               </button>
             </div>
           ) : (
@@ -1221,21 +1233,21 @@ function AdminsTab({
       )}
 
       <div 
-        className="rounded-xl border overflow-hidden"
+        className="rounded-xl border overflow-hidden transition-colors duration-300"
         style={{
-          background: 'hsl(222 47% 6%)',
-          borderColor: 'hsl(217 33% 17%)',
+          background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+          borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
         }}
       >
         <table className="w-full">
           <thead>
-            <tr style={{ background: 'hsl(222 47% 8%)' }}>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Admin</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Role</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Added</th>
+            <tr style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(220 14% 96%)' }}>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Admin</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Role</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Added</th>
               {isSuperAdmin && (
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{ color: 'hsl(215 20% 65%)' }}>Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>Actions</th>
               )}
             </tr>
           </thead>
@@ -1243,8 +1255,8 @@ function AdminsTab({
             {admins.map((admin) => (
               <tr 
                 key={admin.id}
-                className="border-t transition-colors hover:bg-white/5"
-                style={{ borderColor: 'hsl(217 33% 17%)' }}
+                className={`border-t transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}
+                style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -1254,11 +1266,17 @@ function AdminsTab({
                     >
                       {admin.email[0].toUpperCase()}
                     </div>
-                    <span className="font-medium" style={{ color: 'hsl(210 40% 98%)' }}>
+                    <span className="font-medium transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
                       {admin.email}
                     </span>
                     {admin.user_id === currentUserId && (
-                      <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'hsl(217 33% 17%)', color: 'hsl(215 20% 65%)' }}>
+                      <span 
+                        className="text-xs px-2 py-0.5 rounded transition-colors duration-300" 
+                        style={{ 
+                          background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 14% 96%)', 
+                          color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' 
+                        }}
+                      >
                         You
                       </span>
                     )}
@@ -1288,7 +1306,7 @@ function AdminsTab({
                     Active
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm" style={{ color: 'hsl(215 20% 65%)' }}>
+                <td className="px-4 py-3 text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                   {new Date(admin.created_at).toLocaleDateString()}
                 </td>
                 {isSuperAdmin && (
