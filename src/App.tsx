@@ -2778,11 +2778,13 @@ const selectedTableRelationships = useMemo(() => {
                       className={`px-1.5 py-0.5 rounded text-[9px] font-bold border-none outline-none cursor-pointer ${
                         fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
                       }`}
-                      style={{ background: fix.priority === 'high' ? 'rgba(239, 68, 68, 0.2)' : fix.priority === 'low' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)' }}
+                      style={{ 
+                        background: fix.priority === 'high' ? 'rgba(239, 68, 68, 0.2)' : fix.priority === 'low' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                      }}
                     >
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
+                      <option value="low" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', color: isDarkMode ? '#4ade80' : '#16a34a' }}>low</option>
+                      <option value="medium" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', color: isDarkMode ? '#fbbf24' : '#d97706' }}>medium</option>
+                      <option value="high" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', color: isDarkMode ? '#f87171' : '#dc2626' }}>high</option>
                     </select>
                   ) : (
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
@@ -3805,10 +3807,13 @@ const selectedTableRelationships = useMemo(() => {
                                     className={`px-1 py-0.5 rounded text-[9px] font-bold border-none outline-none cursor-pointer ${
                                       fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
                                     }`}
+                                    style={{ 
+                                      background: fix.priority === 'high' ? 'rgba(239, 68, 68, 0.2)' : fix.priority === 'low' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                    }}
                                   >
-                                    <option value="low">low</option>
-                                    <option value="medium">medium</option>
-                                    <option value="high">high</option>
+                                    <option value="low" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', color: isDarkMode ? '#4ade80' : '#16a34a' }}>low</option>
+                                    <option value="medium" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', color: isDarkMode ? '#fbbf24' : '#d97706' }}>medium</option>
+                                    <option value="high" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', color: isDarkMode ? '#f87171' : '#dc2626' }}>high</option>
                                   </select>
                                 ) : (
                                   <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
