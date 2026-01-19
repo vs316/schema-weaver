@@ -177,9 +177,9 @@ export function DiagramSelector({
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            {/* Logo */}
+            {/* Logo - use light variant for light mode */}
             <img 
-              src="/logo.png" 
+              src={isDarkMode ? "/logo.png" : "/logo-light.png"} 
               alt="ERD Studio" 
               className="w-12 h-12 rounded-xl"
             />

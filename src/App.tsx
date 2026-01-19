@@ -2555,13 +2555,13 @@ const selectedTableRelationships = useMemo(() => {
               isDarkMode
                 ? "bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500 focus:bg-slate-900"
                 : "bg-white border-slate-300 text-slate-900 focus:border-indigo-400 focus:bg-slate-50"
-            } ${(isLocked || !userRole.canEdit) ? "opacity-60 cursor-not-allowed" : ""}`}
+            } ${!userRole.canAddMetadata ? "opacity-60 cursor-not-allowed" : ""}`}
             rows={3}
             placeholder="Add notes about this table..."
             value={t.description || ""}
-            onChange={(e) => userRole.canEdit && !isLocked && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
+            onChange={(e) => userRole.canAddMetadata && setTables((prev) => prev.map((x) => (x.id === t.id ? { ...x, description: e.target.value } : x)))}
             onBlur={() => pushHistory()}
-            disabled={isLocked || !userRole.canEdit}
+            disabled={!userRole.canAddMetadata}
           />
           {t.description && (
             <div className={`text-[9px] opacity-75 mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-600"}`}>
@@ -2579,7 +2579,7 @@ const selectedTableRelationships = useMemo(() => {
           isDarkMode={isDarkMode}
         >
           {/* Add comment form - Anyone with canAddMetadata can add comments */}
-          {userRole.canAddMetadata && !isLocked && (
+          {userRole.canAddMetadata && (
             <div className="mb-3 space-y-2">
               <textarea
                 className={`w-full rounded-lg px-3 py-2 text-xs outline-none border focus:ring-2 focus:ring-indigo-500 resize-none transition-all duration-200 ${
@@ -2666,7 +2666,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canAddMetadata && !isLocked && (
+            {userRole.canAddMetadata && (
               <input
                 type="text"
                 placeholder="Add a note..."
@@ -2700,7 +2700,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canAddMetadata && !isLocked && (
+            {userRole.canAddMetadata && (
               <input
                 type="text"
                 placeholder="Ask a question..."
@@ -2734,7 +2734,7 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canAddMetadata && !isLocked && (
+            {userRole.canAddMetadata && (
               <input
                 type="text"
                 placeholder="Log a change..."
@@ -2763,9 +2763,32 @@ const selectedTableRelationships = useMemo(() => {
             {((t as any).fixes || []).map((fix: any) => (
               <div key={fix.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-950" : "bg-white"}`}>
                 <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                    {fix.priority || 'medium'}
-                  </span>
+                  {/* Editable Priority Selector */}
+                  {userRole.canAddMetadata ? (
+                    <select
+                      value={fix.priority || 'medium'}
+                      onChange={(e) => {
+                        const newPriority = e.target.value as 'low' | 'medium' | 'high';
+                        setTables(prev => prev.map(x => x.id === t.id ? {
+                          ...x,
+                          fixes: ((x as any).fixes || []).map((f: any) => f.id === fix.id ? { ...f, priority: newPriority } : f)
+                        } as any : x));
+                        push({ title: "Priority updated", type: "success" });
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold border-none outline-none cursor-pointer ${
+                        fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                      }`}
+                      style={{ background: fix.priority === 'high' ? 'rgba(239, 68, 68, 0.2)' : fix.priority === 'low' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)' }}
+                    >
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                    </select>
+                  ) : (
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {fix.priority || 'medium'}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1" style={{ color: isDarkMode ? '#e2e8f0' : '#334155' }}>{fix.content}</p>
                 <p className="text-[9px] mt-1" style={{ color: isDarkMode ? '#64748b' : '#94a3b8' }}>
@@ -2773,20 +2796,36 @@ const selectedTableRelationships = useMemo(() => {
                 </p>
               </div>
             ))}
-            {userRole.canAddMetadata && !isLocked && (
-              <input
-                type="text"
-                placeholder="Add a fix..."
-                className={`w-full px-3 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
-                    const fix = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), priority: 'medium' };
-                    setTables(prev => prev.map(x => x.id === t.id ? { ...x, fixes: [...((x as any).fixes || []), fix] } as any : x));
-                    (e.target as HTMLInputElement).value = '';
-                    push({ title: "Fix added", type: "success" });
-                  }
-                }}
-              />
+            {userRole.canAddMetadata && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="fix-input"
+                    placeholder="Add a fix..."
+                    className={`flex-1 px-3 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                        const prioritySelect = document.getElementById('fix-priority-select') as HTMLSelectElement;
+                        const priority = prioritySelect?.value || 'medium';
+                        const fix = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), priority };
+                        setTables(prev => prev.map(x => x.id === t.id ? { ...x, fixes: [...((x as any).fixes || []), fix] } as any : x));
+                        (e.target as HTMLInputElement).value = '';
+                        push({ title: "Fix added", type: "success" });
+                      }
+                    }}
+                  />
+                  <select
+                    id="fix-priority-select"
+                    defaultValue="medium"
+                    className={`px-2 py-2 rounded-lg text-xs border outline-none ${isDarkMode ? "bg-slate-950 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900"}`}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+              </div>
             )}
           </div>
         </CollapsibleSection>
@@ -3653,7 +3692,7 @@ const selectedTableRelationships = useMemo(() => {
                           ) : (
                             <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No comments</div>
                           )}
-                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                          {userRole.canAddMetadata && (
                             <input
                               type="text"
                               placeholder="Add comment..."
@@ -3688,7 +3727,7 @@ const selectedTableRelationships = useMemo(() => {
                               <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No notes</div>
                             )}
                           </div>
-                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                          {userRole.canAddMetadata && (
                             <input
                               type="text"
                               placeholder="Add note..."
@@ -3724,7 +3763,7 @@ const selectedTableRelationships = useMemo(() => {
                               <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No questions</div>
                             )}
                           </div>
-                          {userRole.canAddMetadata && !effectiveIsLocked && (
+                          {userRole.canAddMetadata && (
                             <input
                               type="text"
                               placeholder="Add question..."
@@ -3752,32 +3791,68 @@ const selectedTableRelationships = useMemo(() => {
                           </div>
                           <div className="space-y-1 max-h-32 overflow-y-auto">
                             {((t as any).fixes || []).slice(0, 3).map((fix: any) => (
-                              <div key={fix.id} className={`p-2 rounded-lg text-xs ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
-                                <span className={`px-1 py-0.5 rounded text-[9px] font-bold mr-1 ${
-                                  fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
-                                }`}>{fix.priority || 'medium'}</span>
-                                {fix.content}
+                              <div key={fix.id} className={`p-2 rounded-lg text-xs flex items-center gap-2 ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+                                {userRole.canAddMetadata ? (
+                                  <select
+                                    value={fix.priority || 'medium'}
+                                    onChange={(e) => {
+                                      const newPriority = e.target.value as 'low' | 'medium' | 'high';
+                                      setTables(prev => prev.map(x => x.id === t.id ? {
+                                        ...x,
+                                        fixes: ((x as any).fixes || []).map((f: any) => f.id === fix.id ? { ...f, priority: newPriority } : f)
+                                      } as any : x));
+                                    }}
+                                    className={`px-1 py-0.5 rounded text-[9px] font-bold border-none outline-none cursor-pointer ${
+                                      fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                                    }`}
+                                  >
+                                    <option value="low">low</option>
+                                    <option value="medium">medium</option>
+                                    <option value="high">high</option>
+                                  </select>
+                                ) : (
+                                  <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
+                                    fix.priority === 'high' ? 'bg-red-500/20 text-red-400' : fix.priority === 'low' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                                  }`}>{fix.priority || 'medium'}</span>
+                                )}
+                                <span className="flex-1">{fix.content}</span>
                               </div>
                             ))}
                             {((t as any).fixes || []).length === 0 && (
                               <div className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>No fixes</div>
                             )}
                           </div>
-                          {userRole.canAddMetadata && !effectiveIsLocked && (
-                            <input
-                              type="text"
-                              placeholder="Add fix..."
-                              className={`w-full mt-2 px-2 py-1.5 rounded text-xs border outline-none ${
-                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
-                              }`}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
-                                  const fix = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), priority: 'medium' };
-                                  setTables(prev => prev.map(x => x.id === t.id ? { ...x, fixes: [...((x as any).fixes || []), fix] } as any : x));
-                                  (e.target as HTMLInputElement).value = '';
-                                }
-                              }}
-                            />
+                          {userRole.canAddMetadata && (
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                type="text"
+                                id="modal-fix-input"
+                                placeholder="Add fix..."
+                                className={`flex-1 px-2 py-1.5 rounded text-xs border outline-none ${
+                                  isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
+                                }`}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                                    const prioritySelect = document.getElementById('modal-fix-priority') as HTMLSelectElement;
+                                    const priority = prioritySelect?.value || 'medium';
+                                    const fix = { id: generateId(), content: (e.target as HTMLInputElement).value.trim(), author_id: user.id, author_email: user.email || '', created_at: new Date().toISOString(), priority };
+                                    setTables(prev => prev.map(x => x.id === t.id ? { ...x, fixes: [...((x as any).fixes || []), fix] } as any : x));
+                                    (e.target as HTMLInputElement).value = '';
+                                  }
+                                }}
+                              />
+                              <select
+                                id="modal-fix-priority"
+                                defaultValue="medium"
+                                className={`px-2 py-1.5 rounded text-xs border outline-none ${
+                                  isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-800"
+                                }`}
+                              >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                            </div>
                           )}
                         </div>
                       </div>
