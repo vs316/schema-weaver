@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Database, BoxSelect, GitBranch, MessageSquare } from 'lucide-react';
 import type { DiagramType } from '../types/uml';
+import { isDiagramTypeEnabled } from '../config/featureFlags';
 
 interface DiagramTypeSelectorProps {
   currentType: DiagramType;
@@ -9,7 +10,14 @@ interface DiagramTypeSelectorProps {
   isDarkMode: boolean;
 }
 
-const DIAGRAM_TYPES: { type: DiagramType; label: string; icon: React.ReactNode; description: string; disabled?: boolean }[] = [
+interface DiagramTypeConfig {
+  type: DiagramType;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+}
+
+const DIAGRAM_TYPES: DiagramTypeConfig[] = [
   { 
     type: 'erd', 
     label: 'ERD', 
@@ -20,22 +28,19 @@ const DIAGRAM_TYPES: { type: DiagramType; label: string; icon: React.ReactNode; 
     type: 'uml-class', 
     label: 'UML Class', 
     icon: <BoxSelect size={16} />, 
-    description: 'UML Class Diagram (Coming Soon)',
-    disabled: true,
+    description: 'UML Class Diagram',
   },
   { 
     type: 'flowchart', 
     label: 'Flowchart', 
     icon: <GitBranch size={16} />, 
-    description: 'Process Flowchart (Coming Soon)',
-    disabled: true,
+    description: 'Process Flowchart',
   },
   { 
     type: 'sequence', 
     label: 'Sequence', 
     icon: <MessageSquare size={16} />, 
-    description: 'Sequence Diagram (Coming Soon)',
-    disabled: true,
+    description: 'Sequence Diagram',
   },
 ];
 
@@ -44,6 +49,14 @@ export function DiagramTypeSelector({
   onTypeChange,
   isDarkMode,
 }: DiagramTypeSelectorProps) {
+  // Filter to only show enabled diagram types
+  const enabledTypes = DIAGRAM_TYPES.filter(dt => isDiagramTypeEnabled(dt.type));
+  
+  // If only ERD is enabled, don't show the selector
+  if (enabledTypes.length <= 1) {
+    return null;
+  }
+
   return (
     <div 
       className="flex items-center gap-1 p-1 rounded-lg transition-colors"
@@ -52,18 +65,14 @@ export function DiagramTypeSelector({
         border: `1px solid ${isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)'}`,
       }}
     >
-      {DIAGRAM_TYPES.map(({ type, label, icon, description, disabled }) => {
+      {enabledTypes.map(({ type, label, icon, description }) => {
         const isActive = currentType === type;
-        const isDisabled = disabled === true;
         
         return (
           <motion.button
             key={type}
-            onClick={() => !isDisabled && onTypeChange(type)}
-            disabled={isDisabled}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isDisabled ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            onClick={() => onTypeChange(type)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
             style={{
               background: isActive 
                 ? 'hsl(239 84% 67%)' 
@@ -74,10 +83,10 @@ export function DiagramTypeSelector({
                   ? 'hsl(215 20% 65%)' 
                   : 'hsl(215 16% 47%)',
             }}
-            whileHover={!isDisabled && !isActive ? { 
+            whileHover={!isActive ? { 
               backgroundColor: isDarkMode ? 'hsl(222 47% 15%)' : 'hsl(220 14% 90%)' 
             } : undefined}
-            whileTap={!isDisabled ? { scale: 0.98 } : undefined}
+            whileTap={{ scale: 0.98 }}
             title={description}
           >
             {icon}
