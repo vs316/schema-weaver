@@ -2,12 +2,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Json } from '../integrations/supabase/types';
+import type { DiagramType } from '../types/uml';
 
 export interface ERDDiagram {
   id: string;
   name: string;
+  diagram_type: DiagramType;
+  // ERD data
   tables: Json;
   relations: Json;
+  // UML Class Diagram data
+  uml_classes: Json;
+  uml_relations: Json;
+  // Flowchart data
+  flowchart_nodes: Json;
+  flowchart_connections: Json;
+  // Sequence Diagram data
+  sequence_participants: Json;
+  sequence_messages: Json;
+  // Common fields
   viewport: Json;
   is_dark_mode: boolean;
   is_locked?: boolean;
@@ -46,7 +59,12 @@ export function useCloudSync(userId?: string) {
       return;
     }
 
-    setDiagrams(data || []);
+    // Cast diagram_type to DiagramType since DB stores as text
+    const typedData = (data || []).map(d => ({
+      ...d,
+      diagram_type: (d.diagram_type || 'erd') as DiagramType,
+    }));
+    setDiagrams(typedData);
   }, []);
 
   const setupRealtime = useCallback(
@@ -172,7 +190,7 @@ export function useCloudSync(userId?: string) {
   /* CRUD                                                               */
   /* ------------------------------------------------------------------ */
 
-  const createDiagram = async (name: string): Promise<ERDDiagram | null> => {
+  const createDiagram = async (name: string, diagramType: DiagramType = 'erd'): Promise<ERDDiagram | null> => {
     if (!teamId) return null;
 
     setSyncing(true);
@@ -181,8 +199,15 @@ export function useCloudSync(userId?: string) {
       .from('erd_diagrams')
       .insert({
         name,
+        diagram_type: diagramType,
         tables: [],
         relations: [],
+        uml_classes: [],
+        uml_relations: [],
+        flowchart_nodes: [],
+        flowchart_connections: [],
+        sequence_participants: [],
+        sequence_messages: [],
         viewport: {},
         is_dark_mode: false,
         is_locked: false,
@@ -195,17 +220,30 @@ export function useCloudSync(userId?: string) {
 
     if (error || !data) return null;
 
-    setDiagrams((prev) => [data, ...prev]);
-    setCurrentDiagram(data);
+    // Cast diagram_type to DiagramType
+    const typedData: ERDDiagram = {
+      ...data,
+      diagram_type: (data.diagram_type || 'erd') as DiagramType,
+    };
 
-    return data;
+    setDiagrams((prev) => [typedData, ...prev]);
+    setCurrentDiagram(typedData);
+
+    return typedData;
   };
 
   const saveDiagram = async (
     id: string,
     updates: {
+      diagram_type?: DiagramType;
       tables?: Json;
       relations?: Json;
+      uml_classes?: Json;
+      uml_relations?: Json;
+      flowchart_nodes?: Json;
+      flowchart_connections?: Json;
+      sequence_participants?: Json;
+      sequence_messages?: Json;
       viewport?: Json;
       is_dark_mode?: boolean;
       is_locked?: boolean;

@@ -45,14 +45,21 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          diagram_type: string
+          flowchart_connections: Json
+          flowchart_nodes: Json
           id: string
           is_dark_mode: boolean
           is_locked: boolean
           locked_by: string | null
           name: string
           relations: Json
+          sequence_messages: Json
+          sequence_participants: Json
           tables: Json
           team_id: string | null
+          uml_classes: Json
+          uml_relations: Json
           updated_at: string
           updated_by: string | null
           viewport: Json
@@ -60,14 +67,21 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          diagram_type?: string
+          flowchart_connections?: Json
+          flowchart_nodes?: Json
           id?: string
           is_dark_mode?: boolean
           is_locked?: boolean
           locked_by?: string | null
           name?: string
           relations?: Json
+          sequence_messages?: Json
+          sequence_participants?: Json
           tables?: Json
           team_id?: string | null
+          uml_classes?: Json
+          uml_relations?: Json
           updated_at?: string
           updated_by?: string | null
           viewport?: Json
@@ -75,14 +89,21 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          diagram_type?: string
+          flowchart_connections?: Json
+          flowchart_nodes?: Json
           id?: string
           is_dark_mode?: boolean
           is_locked?: boolean
           locked_by?: string | null
           name?: string
           relations?: Json
+          sequence_messages?: Json
+          sequence_participants?: Json
           tables?: Json
           team_id?: string | null
+          uml_classes?: Json
+          uml_relations?: Json
           updated_at?: string
           updated_by?: string | null
           viewport?: Json
