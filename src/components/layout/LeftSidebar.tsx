@@ -3,6 +3,7 @@ import {
   Database,
   Plus,
   Maximize,
+  Minimize2,
   Sun,
   Moon,
   Save,
@@ -44,6 +45,7 @@ interface LeftSidebarProps {
   onAddFlowchartNode?: (type: FlowchartNodeType) => void;
   onAddSequenceParticipant?: (type: SequenceParticipant['type']) => void;
   onResetViewport: () => void;
+  onFitToContent?: () => void;
   onToggleTheme: () => void;
   onExportJSON: () => void;
   onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -84,6 +86,7 @@ export function LeftSidebar({
   onAddFlowchartNode,
   onAddSequenceParticipant,
   onResetViewport,
+  onFitToContent,
   onToggleTheme,
   onExportJSON,
   onImportJSON,
@@ -325,11 +328,22 @@ export function LeftSidebar({
         {/* Reset Viewport */}
         <button
           onClick={onResetViewport}
-          title="Fit to Screen"
+          title="Reset Viewport"
           className={`${buttonClass} hover:bg-muted text-muted-foreground hover:text-foreground`}
         >
           <Maximize size={18} />
         </button>
+
+        {/* Fit to Content - for UML/Flowchart/Sequence */}
+        {onFitToContent && diagramType !== 'erd' && (
+          <button
+            onClick={onFitToContent}
+            title="Fit to Content"
+            className={`${buttonClass} hover:bg-primary/15 text-primary`}
+          >
+            <Minimize2 size={18} />
+          </button>
+        )}
 
         {/* Theme Toggle */}
         <button

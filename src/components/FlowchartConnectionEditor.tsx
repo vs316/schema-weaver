@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import type { FlowchartConnection, FlowchartConnectionType } from "@/types/uml";
+import { useMemo } from "react";
+import type { FlowchartConnection, FlowchartConnectionType } from "../types/uml";
 
 interface FlowchartConnectionEditorProps {
   connection: FlowchartConnection;
@@ -13,6 +13,8 @@ const CONNECTION_TYPE_OPTIONS: Array<{ value: FlowchartConnectionType; label: st
   { value: "dashed", label: "Dashed" },
   { value: "dotted", label: "Dotted" },
   { value: "bidirectional", label: "Bidirectional" },
+  { value: "conditional-yes", label: "Yes (Decision)" },
+  { value: "conditional-no", label: "No (Decision)" },
   { value: "loop-back", label: "Loop-back" },
 ];
 
