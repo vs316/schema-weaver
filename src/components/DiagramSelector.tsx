@@ -33,6 +33,7 @@ import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
 import { DiagramPreview } from './DiagramPreview';
 import { TeamWorkspaceSwitcher } from './TeamWorkspaceSwitcher';
+import { NewDiagramModal } from './NewDiagramModal';
 import { supabase } from '../integrations/supabase/safeClient';
 import { useTheme } from './ThemeProvider';
 import { useUserRole } from '../hooks/useUserRole';
@@ -64,7 +65,7 @@ interface DiagramSelectorProps {
   error?: string | null;
   teamId: string | null;
   onSelect: (diagram: ERDDiagram) => void;
-  onCreate: () => void;
+  onCreate: (type?: DiagramType, name?: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onLogout: () => void;
@@ -92,6 +93,9 @@ export function DiagramSelector({
   const navigate = useNavigate();
   // Toast state for permission denied messages
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  
+  // New Diagram Modal state
+  const [showNewDiagramModal, setShowNewDiagramModal] = useState(false);
   
   // Collapsed state for diagram sections
   const [collapsedSections, setCollapsedSections] = useState<Record<DiagramType, boolean>>({
@@ -301,7 +305,7 @@ export function DiagramSelector({
             {/* New Diagram Button */}
             {canEdit ? (
               <button
-                onClick={onCreate}
+                onClick={() => setShowNewDiagramModal(true)}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 hover:scale-105"
                 style={{
                   background: 'hsl(239 84% 67%)',
@@ -354,7 +358,7 @@ export function DiagramSelector({
               Create your first diagram to get started
             </p>
             <button
-              onClick={onCreate}
+              onClick={() => setShowNewDiagramModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200"
               style={{
                 background: 'hsl(239 84% 67%)',
@@ -764,6 +768,17 @@ export function DiagramSelector({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* New Diagram Modal */}
+      <NewDiagramModal
+        isOpen={showNewDiagramModal}
+        onClose={() => setShowNewDiagramModal(false)}
+        onCreateDiagram={(type, name) => {
+          onCreate(type, name);
+          setShowNewDiagramModal(false);
+        }}
+        isDarkMode={isDarkMode}
+      />
 
       {/* Permission Denied Toast */}
       <AnimatePresence>

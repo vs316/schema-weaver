@@ -8,6 +8,11 @@ import {
   FileText,
   Database,
   Maximize2,
+  Hexagon,
+  Monitor,
+  Layers,
+  Timer,
+  FormInput,
 } from 'lucide-react';
 import type { FlowchartNodeType } from '../types/uml';
 import { FLOWCHART_NODE_LABELS } from '../types/uml';
@@ -26,6 +31,12 @@ const NODE_ICONS: Record<FlowchartNodeType, React.ReactNode> = {
   'document': <FileText size={16} />,
   'data': <Database size={16} />,
   'connector': <Maximize2 size={16} />,
+  'preparation': <Hexagon size={16} />,
+  'manual-input': <FormInput size={16} />,
+  'display': <Monitor size={16} />,
+  'subprocess': <Layers size={16} />,
+  'database': <Database size={16} />,
+  'delay': <Timer size={16} />,
 };
 
 const NODE_COLORS: Record<FlowchartNodeType, string> = {
@@ -36,6 +47,12 @@ const NODE_COLORS: Record<FlowchartNodeType, string> = {
   'document': 'hsl(262 83% 58%)',
   'data': 'hsl(339 90% 51%)',
   'connector': 'hsl(215 20% 65%)',
+  'preparation': 'hsl(280 60% 55%)',
+  'manual-input': 'hsl(30 80% 50%)',
+  'display': 'hsl(180 70% 45%)',
+  'subprocess': 'hsl(220 70% 55%)',
+  'database': 'hsl(350 70% 50%)',
+  'delay': 'hsl(50 80% 50%)',
 };
 
 export function FlowchartToolbox({

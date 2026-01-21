@@ -55,7 +55,7 @@ interface LeftSidebarProps {
   onDuplicateSelected?: () => void;
 }
 
-const NODE_ICONS: Record<FlowchartNodeType, React.ReactNode> = {
+const NODE_ICONS: Partial<Record<FlowchartNodeType, React.ReactNode>> = {
   'start-end': <div className="w-3 h-2 rounded-full border-2 border-current" />,
   'process': <div className="w-3 h-2 border-2 border-current rounded-sm" />,
   'decision': <div className="w-3 h-3 border-2 border-current rotate-45" />,
