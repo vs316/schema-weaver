@@ -78,7 +78,7 @@ export function DiagramTypeSelector({
                 ? 'hsl(239 84% 67%)' 
                 : 'transparent',
               color: isActive 
-                ? 'white' 
+                ? 'hsl(0 0% 100%)' 
                 : isDarkMode 
                   ? 'hsl(215 20% 65%)' 
                   : 'hsl(215 16% 47%)',

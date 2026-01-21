@@ -57,13 +57,19 @@ export interface UMLRelation {
 
 // Flowchart Types
 export type FlowchartNodeType = 
-  | 'start-end'     // oval/rounded rectangle
-  | 'process'       // rectangle
-  | 'decision'      // diamond
-  | 'input-output'  // parallelogram
-  | 'document'      // document shape
-  | 'data'          // parallelogram for data
-  | 'connector';    // circle
+  | 'start-end'       // oval/rounded rectangle
+  | 'process'         // rectangle
+  | 'decision'        // diamond
+  | 'input-output'    // parallelogram
+  | 'document'        // document shape
+  | 'data'            // parallelogram for data
+  | 'connector'       // circle
+  | 'preparation'     // hexagon (manual operation/preparation)
+  | 'manual-input'    // trapezoid (manual input)
+  | 'display'         // curved rectangle (display)
+  | 'subprocess'      // double-bordered rectangle
+  | 'database'        // cylinder
+  | 'delay';          // D-shape (delay/wait)
 
 export interface FlowchartNode {
   id: string;
@@ -74,12 +80,22 @@ export interface FlowchartNode {
   color?: string;
 }
 
+export type FlowchartConnectionType = 
+  | 'arrow'           // standard arrow
+  | 'dashed'          // dashed line with arrow
+  | 'dotted'          // dotted line
+  | 'bidirectional'   // arrow on both ends
+  | 'conditional-yes' // labeled "Yes" 
+  | 'conditional-no'  // labeled "No"
+  | 'loop-back';      // curved loop-back arrow
+
 export interface FlowchartConnection {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
   label?: string;      // like "Yes", "No" for decisions
   lineType: 'straight' | 'curved';
+  connectionType?: FlowchartConnectionType;
 }
 
 // Sequence Diagram Types (future expansion)
@@ -155,4 +171,20 @@ export const FLOWCHART_NODE_LABELS: Record<FlowchartNodeType, string> = {
   'document': 'Document',
   'data': 'Data',
   'connector': 'Connector',
+  'preparation': 'Preparation',
+  'manual-input': 'Manual Input',
+  'display': 'Display',
+  'subprocess': 'Subprocess',
+  'database': 'Database',
+  'delay': 'Delay',
+};
+
+export const FLOWCHART_CONNECTION_LABELS: Record<FlowchartConnectionType, string> = {
+  'arrow': 'Standard Arrow',
+  'dashed': 'Dashed Line',
+  'dotted': 'Dotted Line',
+  'bidirectional': 'Bidirectional',
+  'conditional-yes': 'Yes Branch',
+  'conditional-no': 'No Branch',
+  'loop-back': 'Loop Back',
 };

@@ -53,10 +53,11 @@ import { FlowchartNode } from "./components/FlowchartNode";
 import { FlowchartToolbox, FlowchartNodeEditor } from "./components/FlowchartToolbox";
 import { UMLMarkerDefs, UMLRelationLine } from "./components/UMLRelationLine";
 import { ConnectionToolbar } from "./components/ConnectionToolbar";
-import type { UMLClass, UMLRelation, UMLRelationType, FlowchartNode as FlowchartNodeType, FlowchartConnection } from "./types/uml";
+import type { UMLClass, UMLRelation, UMLRelationType, FlowchartNode as FlowchartNodeType, FlowchartConnection, SequenceParticipant, SequenceMessage } from "./types/uml";
 import type { DiagramType } from "./types/uml";
 
 import { generateSampleData, sampleDataToJSON, sampleDataToSQLInsert } from "./utils/sampleDataGenerator";
+import { exportUMLDiagram as _exportUMLDiagram, exportFlowchartDiagram as _exportFlowchartDiagram } from "./utils/diagramExport";
 
 import html2canvas from "html2canvas";
 import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
@@ -65,6 +66,7 @@ import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
 import { Minimap } from "./components/Minimap";
+import { SequenceParticipantNode, SequenceMessageArrow, SequenceToolbox } from "./components/SequenceDiagram";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
@@ -300,6 +302,14 @@ const [selectedFlowchartConnectionId, setSelectedFlowchartConnectionId] = useSta
 // Flowchart connection drawing state
 const [isDrawingConnection, setIsDrawingConnection] = useState(false);
 const [connectionSource, setConnectionSource] = useState<string | null>(null);
+
+// Sequence Diagram state
+const [sequenceParticipants, setSequenceParticipants] = useState<SequenceParticipant[]>([]);
+const [sequenceMessages, setSequenceMessages] = useState<SequenceMessage[]>([]);
+const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
+const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+// Keep setSequenceMessages available for future message addition UI
+void setSequenceMessages;
 
 // Auto-lock for readers/viewers - they cannot unlock
 const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
@@ -2379,6 +2389,75 @@ const selectedTableRelationships = useMemo(() => {
                 )}
               </>
             )}
+
+            {/* Sequence Diagram Mode */}
+            {diagramType === 'sequence' && (
+              <>
+                <svg className="absolute inset-0 pointer-events-none overflow-visible w-[5000px] h-[5000px]">
+                  {sequenceMessages.map((message) => {
+                    const fromParticipant = sequenceParticipants.find(p => p.id === message.fromId);
+                    const toParticipant = sequenceParticipants.find(p => p.id === message.toId);
+                    return (
+                      <SequenceMessageArrow
+                        key={message.id}
+                        message={message}
+                        fromParticipant={fromParticipant}
+                        toParticipant={toParticipant}
+                        isDarkMode={isDarkMode}
+                        isSelected={selectedMessageId === message.id}
+                        baseY={150}
+                        onSelect={() => {
+                          setSelectedMessageId(message.id);
+                          setSelectedParticipantId(null);
+                        }}
+                      />
+                    );
+                  })}
+                </svg>
+
+                {sequenceParticipants.map((participant) => (
+                  <SequenceParticipantNode
+                    key={participant.id}
+                    participant={participant}
+                    isSelected={selectedParticipantId === participant.id}
+                    isDarkMode={isDarkMode}
+                    diagramHeight={200 + sequenceMessages.length * 50}
+                    onSelect={() => {
+                      setSelectedParticipantId(participant.id);
+                      setSelectedMessageId(null);
+                    }}
+                    onDragStart={(e) => {
+                      if (effectiveIsLocked) return;
+                      e.preventDefault();
+                      const world = toWorld(e.clientX, e.clientY);
+                      initialDragPosRef.current = {
+                        tableX: participant.x,
+                        tableY: 0,
+                        mouseX: world.x,
+                        mouseY: world.y,
+                      };
+                      setDraggedTableId(participant.id);
+                      setIsDragging(true);
+                    }}
+                  />
+                ))}
+
+                {/* Sequence Diagram placeholder when empty */}
+                {sequenceParticipants.length === 0 && (
+                  <div 
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <div className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                      Sequence Diagram
+                    </div>
+                    <div className={`text-sm ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                      Use the toolbox below to add participants
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Connection Toolbar - visible in UML and Flowchart modes */}
@@ -2426,6 +2505,25 @@ const selectedTableRelationships = useMemo(() => {
                 setFlowchartNodes(prev => [...prev, newNode]);
                 setSelectedFlowchartNodeId(newNode.id);
                 push({ title: "Node added", type: "success" });
+              }}
+              isDarkMode={isDarkMode}
+              isLocked={effectiveIsLocked}
+            />
+          )}
+
+          {/* Sequence Toolbox - visible only in sequence mode */}
+          {diagramType === 'sequence' && (
+            <SequenceToolbox
+              onAddParticipant={(type) => {
+                const newParticipant: SequenceParticipant = {
+                  id: generateId(),
+                  name: type === 'actor' ? 'Actor' : type === 'object' ? 'Object' : type.charAt(0).toUpperCase() + type.slice(1),
+                  type,
+                  x: 100 + sequenceParticipants.length * 150,
+                };
+                setSequenceParticipants(prev => [...prev, newParticipant]);
+                setSelectedParticipantId(newParticipant.id);
+                push({ title: "Participant added", type: "success" });
               }}
               isDarkMode={isDarkMode}
               isLocked={effectiveIsLocked}
@@ -4102,8 +4200,10 @@ export default function App() {
             setShowSelector(false);
           }
         }}
-        onCreate={async () => {
-          const newDiagram = await createDiagram('New Diagram');
+        onCreate={async (diagramType, diagramName) => {
+          const name = diagramName || 'New Diagram';
+          const type = diagramType || 'erd';
+          const newDiagram = await createDiagram(name, type);
           if (newDiagram) {
             setSelectedDiagram(newDiagram);
             setShowSelector(false);
