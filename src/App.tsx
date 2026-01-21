@@ -52,6 +52,7 @@ import { UMLClassEditor } from "./components/UMLClassEditor";
 import { FlowchartNode } from "./components/FlowchartNode";
 import { FlowchartToolbox, FlowchartNodeEditor } from "./components/FlowchartToolbox";
 import { UMLMarkerDefs, UMLRelationLine } from "./components/UMLRelationLine";
+import { ConnectionToolbar } from "./components/ConnectionToolbar";
 import type { UMLClass, UMLRelation, UMLRelationType, FlowchartNode as FlowchartNodeType, FlowchartConnection } from "./types/uml";
 import type { DiagramType } from "./types/uml";
 
@@ -2379,6 +2380,37 @@ const selectedTableRelationships = useMemo(() => {
               </>
             )}
           </div>
+
+          {/* Connection Toolbar - visible in UML and Flowchart modes */}
+          {(diagramType === 'uml-class' || diagramType === 'flowchart') && !effectiveIsLocked && (
+            <ConnectionToolbar
+              isVisible={true}
+              isDrawing={diagramType === 'uml-class' ? isDrawingUmlRelation : isDrawingConnection}
+              diagramType={diagramType as 'uml-class' | 'flowchart'}
+              selectedRelationType={pendingUmlRelationType}
+              onStartConnection={() => {
+                if (diagramType === 'uml-class' && selectedUmlClassId) {
+                  setIsDrawingUmlRelation(true);
+                  setUmlRelationSource(selectedUmlClassId);
+                  push({ title: "Click target class", type: "info" });
+                } else if (diagramType === 'flowchart' && selectedFlowchartNodeId) {
+                  setIsDrawingConnection(true);
+                  setConnectionSource(selectedFlowchartNodeId);
+                  push({ title: "Click target node", type: "info" });
+                } else {
+                  push({ title: `Select a ${diagramType === 'uml-class' ? 'class' : 'node'} first`, type: "info" });
+                }
+              }}
+              onCancelConnection={() => {
+                setIsDrawingUmlRelation(false);
+                setUmlRelationSource(null);
+                setIsDrawingConnection(false);
+                setConnectionSource(null);
+              }}
+              onSelectRelationType={(type) => setPendingUmlRelationType(type)}
+              isDarkMode={isDarkMode}
+            />
+          )}
 
           {/* Flowchart Toolbox - visible only in flowchart mode */}
           {diagramType === 'flowchart' && (

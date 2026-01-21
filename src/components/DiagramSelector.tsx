@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -23,6 +23,11 @@ import {
   Crown,
   ShieldCheck,
   XCircle,
+  Database,
+  BoxSelect,
+  GitBranch,
+  MessageSquare,
+  ChevronRight,
 } from 'lucide-react';
 import type { ERDDiagram } from '../hooks/useCloudSync';
 import { TeamManagement } from './TeamManagement';
@@ -32,6 +37,8 @@ import { supabase } from '../integrations/supabase/safeClient';
 import { useTheme } from './ThemeProvider';
 import { useUserRole } from '../hooks/useUserRole';
 import type { UserRole } from '../hooks/useUserRole';
+import { FEATURE_FLAGS } from '../config/featureFlags';
+import type { DiagramType } from '../types/uml';
 
 // Role badge configuration
 const roleConfig: Record<UserRole, { label: string; icon: typeof Eye; color: string; bgColor: string }> = {
@@ -41,6 +48,14 @@ const roleConfig: Record<UserRole, { label: string; icon: typeof Eye; color: str
   dev: { label: 'Developer', icon: Code, color: 'hsl(199 89% 48%)', bgColor: 'hsl(199 89% 48% / 0.15)' },
   reader: { label: 'Reader', icon: Eye, color: 'hsl(215 20% 65%)', bgColor: 'hsl(215 20% 65% / 0.15)' },
   viewer: { label: 'Viewer', icon: Eye, color: 'hsl(215 20% 65%)', bgColor: 'hsl(215 20% 65% / 0.15)' },
+};
+
+// Diagram type configuration
+const diagramTypeConfig: Record<DiagramType, { label: string; icon: typeof Database; color: string }> = {
+  'erd': { label: 'Entity Relationship Diagrams', icon: Database, color: 'hsl(239 84% 67%)' },
+  'uml-class': { label: 'UML Class Diagrams', icon: BoxSelect, color: 'hsl(262 83% 58%)' },
+  'flowchart': { label: 'Flowcharts', icon: GitBranch, color: 'hsl(142 76% 36%)' },
+  'sequence': { label: 'Sequence Diagrams', icon: MessageSquare, color: 'hsl(38 92% 50%)' },
 };
 
 interface DiagramSelectorProps {
@@ -78,8 +93,45 @@ export function DiagramSelector({
   // Toast state for permission denied messages
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   
+  // Collapsed state for diagram sections
+  const [collapsedSections, setCollapsedSections] = useState<Record<DiagramType, boolean>>({
+    'erd': false,
+    'uml-class': false,
+    'flowchart': false,
+    'sequence': false,
+  });
+  
   // Get user role permissions
   const { role, canEdit, canDelete } = useUserRole(teamId);
+
+  // Group diagrams by type
+  const groupedDiagrams = useMemo(() => {
+    const groups: Record<DiagramType, ERDDiagram[]> = {
+      'erd': [],
+      'uml-class': [],
+      'flowchart': [],
+      'sequence': [],
+    };
+    
+    diagrams.forEach(diagram => {
+      const type = (diagram.diagram_type as DiagramType) || 'erd';
+      if (groups[type]) {
+        groups[type].push(diagram);
+      } else {
+        groups['erd'].push(diagram);
+      }
+    });
+    
+    return groups;
+  }, [diagrams]);
+
+  // Toggle section collapse
+  const toggleSection = (type: DiagramType) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [type]: !prev[type],
+    }));
+  };
 
   // Show permission denied toast
   const showPermissionDenied = useCallback((action: string) => {
@@ -314,156 +366,278 @@ export function DiagramSelector({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <AnimatePresence mode="popLayout">
-              {diagrams.map((diagram) => (
-                <motion.div
-                  key={diagram.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="group relative rounded-xl border cursor-pointer transition-all duration-200 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/10"
-                  style={{
-                    background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
-                    borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
-                  }}
-                  onClick={() => !editingDiagramId && onSelect(diagram)}
-                >
-                  {/* Preview area with diagram preview on hover */}
-                  <div 
-                    className="h-32 rounded-t-xl flex items-center justify-center overflow-hidden relative transition-colors duration-300"
-                    style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 96%)' }}
+          <div className="space-y-6">
+            {/* Render sections for each diagram type */}
+            {(Object.keys(diagramTypeConfig) as DiagramType[]).map(type => {
+              // Only show section if:
+              // 1. It's ERD (always show), or
+              // 2. Feature flag is enabled for that type, or
+              // 3. There are existing diagrams of that type
+              const shouldShowSection = 
+                type === 'erd' || 
+                (type === 'uml-class' && FEATURE_FLAGS.ENABLE_UML_DIAGRAMS) ||
+                (type === 'flowchart' && FEATURE_FLAGS.ENABLE_FLOWCHART_DIAGRAMS) ||
+                (type === 'sequence' && FEATURE_FLAGS.ENABLE_SEQUENCE_DIAGRAMS) ||
+                groupedDiagrams[type].length > 0;
+              
+              if (!shouldShowSection) return null;
+              
+              const config = diagramTypeConfig[type];
+              const diagramsOfType = groupedDiagrams[type];
+              const isCollapsed = collapsedSections[type];
+              const IconComponent = config.icon;
+              
+              return (
+                <div key={type} className="space-y-3">
+                  {/* Section Header */}
+                  <button
+                    onClick={() => toggleSection(type)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors hover:bg-muted/50"
+                    style={{ 
+                      background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(220 14% 96%)',
+                    }}
                   >
-                    <DiagramPreview 
-                      tables={diagram.tables} 
-                      relations={diagram.relations}
-                      isDarkMode={isDarkMode}
-                    />
-                  </div>
-
-                  {/* Info */}
-                  <div className="p-4">
-                    {editingDiagramId === diagram.id && canEdit ? (
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="flex-1 px-2 py-1 rounded text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-300"
-                          style={{
-                            background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
-                            borderColor: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(220 13% 91%)',
-                            color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
-                          }}
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              onRename(diagram.id, editName);
-                              setEditingDiagramId(null);
-                            } else if (e.key === 'Escape') {
-                              setEditingDiagramId(null);
-                            }
-                          }}
-                        />
-                        <button
-                          onClick={() => {
-                            onRename(diagram.id, editName);
-                            setEditingDiagramId(null);
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors"
-                        >
-                          <Check size={14} style={{ color: 'hsl(142 76% 36%)' }} />
-                        </button>
-                        <button
-                          onClick={() => setEditingDiagramId(null)}
-                          className="p-1.5 rounded-lg hover:bg-red-500/20 transition-colors"
-                        >
-                          <X size={14} style={{ color: 'hsl(0 84% 60%)' }} />
-                        </button>
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={{ background: `${config.color}20`, color: config.color }}
+                      >
+                        <IconComponent size={18} />
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold truncate flex-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
-                          {diagram.name}
-                        </h3>
-                        {/* Rename button - show for all but trigger toast for restricted users */}
-                        {canEdit ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditName(diagram.name);
-                              setEditingDiagramId(diagram.id);
-                            }}
-                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
-                            title="Rename diagram"
+                      <span 
+                        className="text-sm font-semibold"
+                        style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}
+                      >
+                        {config.label}
+                      </span>
+                      <span 
+                        className="px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ 
+                          background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
+                          color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)',
+                        }}
+                      >
+                        {diagramsOfType.length}
+                      </span>
+                    </div>
+                    <motion.div
+                      animate={{ rotate: isCollapsed ? 0 : 90 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight size={18} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+                    </motion.div>
+                  </button>
+
+                  {/* Section Content */}
+                  <AnimatePresence>
+                    {!isCollapsed && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        {diagramsOfType.length === 0 ? (
+                          <div 
+                            className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed"
+                            style={{ borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
                           >
-                            <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
-                          </button>
+                            <IconComponent 
+                              size={32} 
+                              className="mb-2" 
+                              style={{ color: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(215 16% 70%)' }} 
+                            />
+                            <p 
+                              className="text-sm"
+                              style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}
+                            >
+                              No {config.label.toLowerCase()} yet
+                            </p>
+                          </div>
                         ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              showPermissionDenied('rename diagrams');
-                            }}
-                            className={`p-1 rounded opacity-0 group-hover:opacity-50 transition-all cursor-not-allowed`}
-                            title="You don't have permission to rename diagrams"
-                          >
-                            <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 45%)' : 'hsl(215 16% 67%)' }} />
-                          </button>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <AnimatePresence mode="popLayout">
+                              {diagramsOfType.map((diagram) => (
+                                <motion.div
+                                  key={diagram.id}
+                                  layout
+                                  initial={{ opacity: 0, scale: 0.95 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  className="group relative rounded-xl border cursor-pointer transition-all duration-200 hover:shadow-lg"
+                                  style={{
+                                    background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+                                    borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = config.color + '80';
+                                    e.currentTarget.style.boxShadow = `0 10px 25px -5px ${config.color}20`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                  }}
+                                  onClick={() => !editingDiagramId && onSelect(diagram)}
+                                >
+                                  {/* Preview area with diagram type badge */}
+                                  <div 
+                                    className="h-32 rounded-t-xl flex items-center justify-center overflow-hidden relative transition-colors duration-300"
+                                    style={{ background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 96%)' }}
+                                  >
+                                    <DiagramPreview 
+                                      tables={diagram.tables} 
+                                      relations={diagram.relations}
+                                      isDarkMode={isDarkMode}
+                                    />
+                                    {/* Type badge */}
+                                    <div 
+                                      className="absolute top-2 left-2 px-2 py-1 rounded-md flex items-center gap-1 text-[10px] font-medium"
+                                      style={{
+                                        background: `${config.color}20`,
+                                        color: config.color,
+                                      }}
+                                    >
+                                      <IconComponent size={12} />
+                                      {type === 'erd' ? 'ERD' : type === 'uml-class' ? 'UML' : type === 'flowchart' ? 'Flow' : 'Seq'}
+                                    </div>
+                                  </div>
+
+                                  {/* Info */}
+                                  <div className="p-4">
+                                    {editingDiagramId === diagram.id && canEdit ? (
+                                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                          type="text"
+                                          value={editName}
+                                          onChange={(e) => setEditName(e.target.value)}
+                                          className="flex-1 px-2 py-1 rounded text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-300"
+                                          style={{
+                                            background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+                                            borderColor: isDarkMode ? 'hsl(217 33% 25%)' : 'hsl(220 13% 91%)',
+                                            color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)',
+                                          }}
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              onRename(diagram.id, editName);
+                                              setEditingDiagramId(null);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingDiagramId(null);
+                                            }
+                                          }}
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            onRename(diagram.id, editName);
+                                            setEditingDiagramId(null);
+                                          }}
+                                          className="p-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                                        >
+                                          <Check size={14} style={{ color: 'hsl(142 76% 36%)' }} />
+                                        </button>
+                                        <button
+                                          onClick={() => setEditingDiagramId(null)}
+                                          className="p-1.5 rounded-lg hover:bg-red-500/20 transition-colors"
+                                        >
+                                          <X size={14} style={{ color: 'hsl(0 84% 60%)' }} />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <h3 className="font-semibold truncate flex-1 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
+                                          {diagram.name}
+                                        </h3>
+                                        {/* Rename button */}
+                                        {canEdit ? (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditName(diagram.name);
+                                              setEditingDiagramId(diagram.id);
+                                            }}
+                                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
+                                            title="Rename diagram"
+                                          >
+                                            <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              showPermissionDenied('rename diagrams');
+                                            }}
+                                            className={`p-1 rounded opacity-0 group-hover:opacity-50 transition-all cursor-not-allowed`}
+                                            title="You don't have permission to rename diagrams"
+                                          >
+                                            <Edit2 size={12} style={{ color: isDarkMode ? 'hsl(215 20% 45%)' : 'hsl(215 16% 67%)' }} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                    
+                                    <div className="mt-2 flex items-center gap-4 text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
+                                      <span className="flex items-center gap-1">
+                                        <Clock size={12} />
+                                        {formatDate(diagram.updated_at)}
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <Users size={12} />
+                                        Team
+                                      </span>
+                                    </div>
+
+                                    <div className="mt-3 flex items-center gap-2 text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
+                                      <span className="px-2 py-1 rounded transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
+                                        {type === 'erd' ? `${(diagram.tables as unknown[])?.length || 0} tables` : 
+                                         type === 'uml-class' ? `${(diagram.uml_classes as unknown[])?.length || 0} classes` :
+                                         type === 'flowchart' ? `${(diagram.flowchart_nodes as unknown[])?.length || 0} nodes` :
+                                         `${(diagram.sequence_participants as unknown[])?.length || 0} participants`}
+                                      </span>
+                                      <span className="px-2 py-1 rounded transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
+                                        {type === 'erd' ? `${(diagram.relations as unknown[])?.length || 0} relations` :
+                                         type === 'uml-class' ? `${(diagram.uml_relations as unknown[])?.length || 0} relations` :
+                                         type === 'flowchart' ? `${(diagram.flowchart_connections as unknown[])?.length || 0} connections` :
+                                         `${(diagram.sequence_messages as unknown[])?.length || 0} messages`}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Delete button */}
+                                  {canDelete ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteConfirmId(diagram.id);
+                                      }}
+                                      className="absolute top-2 right-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                      style={{ background: 'hsl(0 84% 60% / 0.1)' }}
+                                    >
+                                      <Trash2 size={16} style={{ color: 'hsl(0 84% 60%)' }} />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        showPermissionDenied('delete diagrams');
+                                      }}
+                                      className="absolute top-2 right-2 p-2 rounded-lg opacity-0 group-hover:opacity-50 transition-opacity duration-200 cursor-not-allowed"
+                                      style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
+                                      title="You don't have permission to delete diagrams"
+                                    >
+                                      <Trash2 size={16} style={{ color: isDarkMode ? 'hsl(215 20% 45%)' : 'hsl(215 16% 67%)' }} />
+                                    </button>
+                                  )}
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+                          </div>
                         )}
-                      </div>
+                      </motion.div>
                     )}
-                    
-                    <div className="mt-2 flex items-center gap-4 text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
-                      <span className="flex items-center gap-1">
-                        <Clock size={12} />
-                        {formatDate(diagram.updated_at)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users size={12} />
-                        Team
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-2 text-xs transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
-                      <span className="px-2 py-1 rounded transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
-                        {(diagram.tables as unknown[])?.length || 0} tables
-                      </span>
-                      <span className="px-2 py-1 rounded transition-colors duration-300" style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}>
-                        {(diagram.relations as unknown[])?.length || 0} relations
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Delete button - show for all but trigger toast for restricted users */}
-                  {canDelete ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConfirmId(diagram.id);
-                      }}
-                      className="absolute top-2 right-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                      style={{ background: 'hsl(0 84% 60% / 0.1)' }}
-                    >
-                      <Trash2 size={16} style={{ color: 'hsl(0 84% 60%)' }} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        showPermissionDenied('delete diagrams');
-                      }}
-                      className="absolute top-2 right-2 p-2 rounded-lg opacity-0 group-hover:opacity-50 transition-opacity duration-200 cursor-not-allowed"
-                      style={{ background: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)' }}
-                      title="You don't have permission to delete diagrams"
-                    >
-                      <Trash2 size={16} style={{ color: isDarkMode ? 'hsl(215 20% 45%)' : 'hsl(215 16% 67%)' }} />
-                    </button>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                  </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
