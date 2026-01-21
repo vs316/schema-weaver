@@ -21,10 +21,14 @@ import {
   Link2,
   Trash2,
   Copy,
+  MessageSquare,
+  User,
+  ArrowRight,
 } from "lucide-react";
 import type { DiagramType } from "../../types/uml";
 import type { FlowchartNodeType } from "../../types/uml";
 import { FLOWCHART_NODE_LABELS } from "../../types/uml";
+import type { SequenceParticipant } from "../../types/uml";
 
 interface LeftSidebarProps {
   isDarkMode: boolean;
@@ -38,6 +42,7 @@ interface LeftSidebarProps {
   onAddTable: () => void;
   onAddUmlClass?: () => void;
   onAddFlowchartNode?: (type: FlowchartNodeType) => void;
+  onAddSequenceParticipant?: (type: SequenceParticipant['type']) => void;
   onResetViewport: () => void;
   onToggleTheme: () => void;
   onExportJSON: () => void;
@@ -77,6 +82,7 @@ export function LeftSidebar({
   onAddTable,
   onAddUmlClass,
   onAddFlowchartNode,
+  onAddSequenceParticipant,
   onResetViewport,
   onToggleTheme,
   onExportJSON,
@@ -102,6 +108,8 @@ export function LeftSidebar({
         return <BoxSelect size={22} />;
       case 'flowchart':
         return <GitBranch size={22} />;
+      case 'sequence':
+        return <MessageSquare size={22} />;
       default:
         return <Database size={22} />;
     }
@@ -218,6 +226,59 @@ export function LeftSidebar({
     </>
   );
 
+  // Render Sequence-specific tools
+  const renderSequenceTools = () => (
+    <>
+      {/* Add Participant buttons */}
+      {onAddSequenceParticipant && (
+        <>
+          <button
+            onClick={() => onAddSequenceParticipant('actor')}
+            title="Add Actor"
+            disabled={isLocked}
+            className={`${buttonClass} ${isLocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary/15'} text-primary`}
+          >
+            <User size={18} />
+          </button>
+          <button
+            onClick={() => onAddSequenceParticipant('object')}
+            title="Add Object"
+            disabled={isLocked}
+            className={`${buttonClass} ${isLocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary/15'} text-primary`}
+          >
+            <BoxSelect size={18} />
+          </button>
+        </>
+      )}
+
+      <div className="w-8 h-px bg-border my-1" />
+
+      {/* Add Message */}
+      {onStartConnection && (
+        <button
+          onClick={onStartConnection}
+          title="Add Message (M)"
+          disabled={isLocked}
+          className={`${buttonClass} ${isLocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-secondary/15'} text-secondary-foreground`}
+        >
+          <ArrowRight size={18} />
+        </button>
+      )}
+
+      {/* Delete Selected */}
+      {onDeleteSelected && (
+        <button
+          onClick={onDeleteSelected}
+          title="Delete (Del)"
+          disabled={isLocked}
+          className={`${buttonClass} ${isLocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-destructive/15'} text-destructive`}
+        >
+          <Trash2 size={18} />
+        </button>
+      )}
+    </>
+  );
+
   return (
     <motion.div
       initial={{ x: -20, opacity: 0 }}
@@ -236,6 +297,7 @@ export function LeftSidebar({
         {diagramType === 'erd' && renderERDTools()}
         {diagramType === 'uml-class' && renderUMLTools()}
         {diagramType === 'flowchart' && renderFlowchartTools()}
+        {diagramType === 'sequence' && renderSequenceTools()}
 
         <div className="w-8 h-px bg-border my-1" />
 

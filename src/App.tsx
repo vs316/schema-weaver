@@ -66,7 +66,7 @@ import { DiagramSelector } from "./components/DiagramSelector";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
 import { Minimap } from "./components/Minimap";
-import { SequenceParticipantNode, SequenceMessageArrow, SequenceToolbox } from "./components/SequenceDiagram";
+import { SequenceParticipantNode, SequenceMessageArrow, SequenceToolbox, SequenceEditor } from "./components/SequenceDiagram";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
@@ -176,7 +176,19 @@ function ERDBuilder({
 }: { 
   user: AppUser;
   diagram: ERDDiagram | null;
-  onSave: (updates: { tables?: Json; relations?: Json; viewport?: Json; is_dark_mode?: boolean }) => void;
+  onSave: (updates: { 
+    tables?: Json; 
+    relations?: Json; 
+    uml_classes?: Json;
+    uml_relations?: Json;
+    flowchart_nodes?: Json;
+    flowchart_connections?: Json;
+    sequence_participants?: Json;
+    sequence_messages?: Json;
+    viewport?: Json; 
+    is_dark_mode?: boolean;
+    is_locked?: boolean;
+  }) => void;
   onBack: () => void;
   syncing: boolean;
   onLogout: () => void;
@@ -470,11 +482,35 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
         const loadedRelations = (diagram.relations as Relation[]) || [];
         const loadedViewport = (diagram.viewport as { x: number; y: number; zoom: number }) || { x: 0, y: 0, zoom: 1 };
         
+        // Load ERD data
         setTables(loadedTables);
         setRelations(loadedRelations);
         setViewport(loadedViewport);
         setIsDarkMode(diagram.is_dark_mode ?? true);
         setIsLocked(diagram.is_locked ?? false);
+        
+        // Load diagram type and set the correct view
+        const loadedDiagramType = (diagram.diagram_type as DiagramType) || 'erd';
+        setDiagramType(loadedDiagramType);
+        
+        // Load UML data
+        const loadedUmlClasses = (diagram.uml_classes as unknown as UMLClass[]) || [];
+        const loadedUmlRelations = (diagram.uml_relations as unknown as UMLRelation[]) || [];
+        setUmlClasses(loadedUmlClasses);
+        setUmlRelations(loadedUmlRelations);
+        
+        // Load Flowchart data
+        const loadedFlowchartNodes = (diagram.flowchart_nodes as unknown as FlowchartNodeType[]) || [];
+        const loadedFlowchartConnections = (diagram.flowchart_connections as unknown as FlowchartConnection[]) || [];
+        setFlowchartNodes(loadedFlowchartNodes);
+        setFlowchartConnections(loadedFlowchartConnections);
+        
+        // Load Sequence diagram data
+        const loadedSequenceParticipants = (diagram.sequence_participants as unknown as SequenceParticipant[]) || [];
+        const loadedSequenceMessages = (diagram.sequence_messages as unknown as SequenceMessage[]) || [];
+        setSequenceParticipants(loadedSequenceParticipants);
+        setSequenceMessages(loadedSequenceMessages);
+        
         setLastSaved("Loaded from cloud");
       } catch (e) {
         console.error("Failed to load data from cloud", e);
@@ -537,10 +573,17 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInitialLoad.current]);
 
-  // Auto-save to cloud and localStorage
+  // Auto-save to cloud and localStorage - includes all diagram types
   useEffect(() => {
     if (isInitialLoad.current) return;
-    if (tables.length === 0 && relations.length === 0) return;
+    
+    // Check if there's any content to save based on diagram type
+    const hasERDContent = tables.length > 0 || relations.length > 0;
+    const hasUMLContent = umlClasses.length > 0 || umlRelations.length > 0;
+    const hasFlowchartContent = flowchartNodes.length > 0 || flowchartConnections.length > 0;
+    const hasSequenceContent = sequenceParticipants.length > 0 || sequenceMessages.length > 0;
+    
+    if (!hasERDContent && !hasUMLContent && !hasFlowchartContent && !hasSequenceContent) return;
 
     // Clear existing timeout
     if (saveTimeoutRef.current) {
@@ -554,7 +597,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       // Track when we saved locally to avoid re-applying our own changes
       lastLocalSaveRef.current = Date.now().toString();
       
-      // Save to localStorage as backup
+      // Save to localStorage as backup (ERD data only for backward compatibility)
       localStorage.setItem(
         "erd-data",
         JSON.stringify({
@@ -565,10 +608,16 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
         })
       );
 
-      // Save to cloud
+      // Save ALL diagram type data to cloud
       onSave({
         tables: tables as Json,
         relations: relations as Json,
+        uml_classes: umlClasses as unknown as Json,
+        uml_relations: umlRelations as unknown as Json,
+        flowchart_nodes: flowchartNodes as unknown as Json,
+        flowchart_connections: flowchartConnections as unknown as Json,
+        sequence_participants: sequenceParticipants as unknown as Json,
+        sequence_messages: sequenceMessages as unknown as Json,
         viewport: viewport as Json,
         is_dark_mode: isDarkMode,
       });
@@ -584,7 +633,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tables, relations, isDarkMode, viewport]);
+  }, [tables, relations, umlClasses, umlRelations, flowchartNodes, flowchartConnections, sequenceParticipants, sequenceMessages, isDarkMode, viewport]);
 
   // Push history on non-drag meaningful changes
   useEffect(() => {
@@ -809,11 +858,25 @@ const selectedTableRelationships = useMemo(() => {
         setLassoStart(world);
         setLassoRect({ x: world.x, y: world.y, w: 0, h: 0 });
 
+        // Clear all selections based on diagram type
         setSelectedEdgeId(null);
         if (!e.shiftKey) {
           setSelectedTableId(null);
           setMultiSelectedTableIds(new Set());
+          // Clear non-ERD selections
+          setSelectedUmlClassId(null);
+          setSelectedUmlRelationId(null);
+          setSelectedFlowchartNodeId(null);
+          setSelectedFlowchartConnectionId(null);
+          setSelectedParticipantId(null);
+          setSelectedMessageId(null);
         }
+        
+        // Cancel any in-progress connection drawing
+        setIsDrawingUmlRelation(false);
+        setUmlRelationSource(null);
+        setIsDrawingConnection(false);
+        setConnectionSource(null);
       }
     }
   };
@@ -845,6 +908,11 @@ const selectedTableRelationships = useMemo(() => {
     } else if (diagramType === 'flowchart') {
       setFlowchartNodes((prev) =>
         prev.map((n) => n.id === draggedTableId ? { ...n, x: newX, y: newY } : n)
+      );
+    } else if (diagramType === 'sequence') {
+      // Sequence participants only move horizontally
+      setSequenceParticipants((prev) =>
+        prev.map((p) => p.id === draggedTableId ? { ...p, x: newX } : p)
       );
     } else {
       // ERD mode - Apply to all selected tables using their stored offsets
@@ -3589,6 +3657,60 @@ const selectedTableRelationships = useMemo(() => {
                   )}
                 </div>
               </div>
+            ) : diagramType === 'sequence' ? (
+              // Sequence Diagram Panel
+              <SequenceEditor
+                participants={sequenceParticipants}
+                messages={sequenceMessages}
+                selectedParticipantId={selectedParticipantId}
+                selectedMessageId={selectedMessageId}
+                isLocked={effectiveIsLocked}
+                isDarkMode={isDarkMode}
+                onAddParticipant={(type) => {
+                  const newParticipant: SequenceParticipant = {
+                    id: generateId(),
+                    name: type === 'actor' ? 'Actor' : type.charAt(0).toUpperCase() + type.slice(1),
+                    type,
+                    x: 100 + sequenceParticipants.length * 150,
+                  };
+                  setSequenceParticipants(prev => [...prev, newParticipant]);
+                  setSelectedParticipantId(newParticipant.id);
+                  push({ title: "Participant added", type: "success" });
+                }}
+                onUpdateParticipant={(id, updates) => {
+                  setSequenceParticipants(prev => prev.map(p => 
+                    p.id === id ? { ...p, ...updates } : p
+                  ));
+                }}
+                onDeleteParticipant={(id) => {
+                  setSequenceParticipants(prev => prev.filter(p => p.id !== id));
+                  setSequenceMessages(prev => prev.filter(m => m.fromId !== id && m.toId !== id));
+                  setSelectedParticipantId(null);
+                  push({ title: "Participant deleted", type: "info" });
+                }}
+                onAddMessage={(fromId, toId, label, type) => {
+                  const newMessage: SequenceMessage = {
+                    id: generateId(),
+                    fromId,
+                    toId,
+                    label,
+                    type,
+                    order: sequenceMessages.length,
+                  };
+                  setSequenceMessages(prev => [...prev, newMessage]);
+                  push({ title: "Message added", type: "success" });
+                }}
+                onUpdateMessage={(id, updates) => {
+                  setSequenceMessages(prev => prev.map(m => 
+                    m.id === id ? { ...m, ...updates } : m
+                  ));
+                }}
+                onDeleteMessage={(id) => {
+                  setSequenceMessages(prev => prev.filter(m => m.id !== id));
+                  setSelectedMessageId(null);
+                  push({ title: "Message deleted", type: "info" });
+                }}
+              />
             ) : (
               <div className={`space-y-5`}>
                 <div className={`h-full flex flex-col items-center justify-center text-center select-none transition-colors duration-300 ${isDarkMode ? "text-slate-700" : "text-slate-400"}`}>
