@@ -67,6 +67,8 @@ import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
 import { Minimap } from "./components/Minimap";
 import { SequenceParticipantNode, SequenceMessageArrow, SequenceToolbox, SequenceEditor } from "./components/SequenceDiagram";
+import { FlowchartConnectionEditor } from "./components/FlowchartConnectionEditor";
+import { useTheme } from "./components/ThemeProvider";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
@@ -200,7 +202,7 @@ function ERDBuilder({
   const [relations, setRelations] = useState<Relation[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDarkMode, toggleTheme, setTheme } = useTheme();
   const [lastSaved, setLastSaved] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -227,6 +229,25 @@ function ERDBuilder({
   const [edgeDragStartBend, setEdgeDragStartBend] = useState<{ x: number; y: number } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const normalizeViewport = useCallback((raw: any) => {
+    const x = Number(raw?.x);
+    const y = Number(raw?.y);
+    const z = Number(raw?.zoom);
+    return {
+      x: Number.isFinite(x) ? x : 0,
+      y: Number.isFinite(y) ? y : 0,
+      zoom: Number.isFinite(z) && z > 0 ? z : 1,
+    };
+  }, []);
+
+  const getCanvasCenterWorld = useCallback(() => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 120, y: 120 };
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    return toWorld(cx, cy);
+  }, [viewport.x, viewport.y, viewport.zoom]);
 
   const toWorld = (clientX: number, clientY: number) => {
     if (!canvasRef.current) return { x: 0, y: 0 };
@@ -311,9 +332,12 @@ const [flowchartConnections, setFlowchartConnections] = useState<FlowchartConnec
 const [selectedFlowchartNodeId, setSelectedFlowchartNodeId] = useState<string | null>(null);
 const [selectedFlowchartConnectionId, setSelectedFlowchartConnectionId] = useState<string | null>(null);
 
-// Flowchart connection drawing state
+  // Flowchart connection drawing state
 const [isDrawingConnection, setIsDrawingConnection] = useState(false);
 const [connectionSource, setConnectionSource] = useState<string | null>(null);
+  const [pendingFlowchartConnectionType, setPendingFlowchartConnectionType] = useState<
+    import("./types/uml").FlowchartConnectionType
+  >("arrow");
 
 // Sequence Diagram state
 const [sequenceParticipants, setSequenceParticipants] = useState<SequenceParticipant[]>([]);
@@ -480,13 +504,16 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       try {
         const loadedTables = (diagram.tables as Table[]) || [];
         const loadedRelations = (diagram.relations as Relation[]) || [];
-        const loadedViewport = (diagram.viewport as { x: number; y: number; zoom: number }) || { x: 0, y: 0, zoom: 1 };
+        const loadedViewport = normalizeViewport(diagram.viewport);
         
         // Load ERD data
         setTables(loadedTables);
         setRelations(loadedRelations);
         setViewport(loadedViewport);
-        setIsDarkMode(diagram.is_dark_mode ?? true);
+        // Ensure global theme is applied consistently (diagram should follow global theme)
+        if (typeof diagram.is_dark_mode === 'boolean') {
+          setTheme(diagram.is_dark_mode ? 'dark' : 'light');
+        }
         setIsLocked(diagram.is_locked ?? false);
         
         // Load diagram type and set the correct view
@@ -494,19 +521,36 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
         setDiagramType(loadedDiagramType);
         
         // Load UML data
-        const loadedUmlClasses = (diagram.uml_classes as unknown as UMLClass[]) || [];
+        const loadedUmlClasses = ((diagram.uml_classes as unknown as UMLClass[]) || []).map((c) => {
+          const x = Number((c as any).x);
+          const y = Number((c as any).y);
+          if (Number.isFinite(x) && Number.isFinite(y)) return c;
+          const center = getCanvasCenterWorld();
+          return { ...c, x: center.x, y: center.y };
+        });
         const loadedUmlRelations = (diagram.uml_relations as unknown as UMLRelation[]) || [];
         setUmlClasses(loadedUmlClasses);
         setUmlRelations(loadedUmlRelations);
         
         // Load Flowchart data
-        const loadedFlowchartNodes = (diagram.flowchart_nodes as unknown as FlowchartNodeType[]) || [];
+        const loadedFlowchartNodes = ((diagram.flowchart_nodes as unknown as FlowchartNodeType[]) || []).map((n) => {
+          const x = Number((n as any).x);
+          const y = Number((n as any).y);
+          if (Number.isFinite(x) && Number.isFinite(y)) return n;
+          const center = getCanvasCenterWorld();
+          return { ...n, x: center.x, y: center.y };
+        });
         const loadedFlowchartConnections = (diagram.flowchart_connections as unknown as FlowchartConnection[]) || [];
         setFlowchartNodes(loadedFlowchartNodes);
         setFlowchartConnections(loadedFlowchartConnections);
         
         // Load Sequence diagram data
-        const loadedSequenceParticipants = (diagram.sequence_participants as unknown as SequenceParticipant[]) || [];
+        const loadedSequenceParticipants = ((diagram.sequence_participants as unknown as SequenceParticipant[]) || []).map((p, idx) => {
+          const x = Number((p as any).x);
+          if (Number.isFinite(x)) return p;
+          const center = getCanvasCenterWorld();
+          return { ...p, x: center.x + idx * 150 };
+        });
         const loadedSequenceMessages = (diagram.sequence_messages as unknown as SequenceMessage[]) || [];
         setSequenceParticipants(loadedSequenceParticipants);
         setSequenceMessages(loadedSequenceMessages);
@@ -529,7 +573,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
         }
       }
     }
-  }, [diagram]);
+  }, [diagram, normalizeViewport, getCanvasCenterWorld, setTheme]);
 
   // Listen for remote changes after initial load
   useEffect(() => {
@@ -609,16 +653,32 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       );
 
       // Save ALL diagram type data to cloud
+      const safeViewport = normalizeViewport(viewport);
+      const safeUmlClasses = umlClasses.map((c) => ({
+        ...c,
+        x: Number.isFinite(Number((c as any).x)) ? Number((c as any).x) : safeViewport.x,
+        y: Number.isFinite(Number((c as any).y)) ? Number((c as any).y) : safeViewport.y,
+      }));
+      const safeFlowchartNodes = flowchartNodes.map((n) => ({
+        ...n,
+        x: Number.isFinite(Number((n as any).x)) ? Number((n as any).x) : safeViewport.x,
+        y: Number.isFinite(Number((n as any).y)) ? Number((n as any).y) : safeViewport.y,
+      }));
+      const safeSequenceParticipants = sequenceParticipants.map((p, idx) => ({
+        ...p,
+        x: Number.isFinite(Number((p as any).x)) ? Number((p as any).x) : safeViewport.x + idx * 150,
+      }));
+
       onSave({
         tables: tables as Json,
         relations: relations as Json,
-        uml_classes: umlClasses as unknown as Json,
+        uml_classes: safeUmlClasses as unknown as Json,
         uml_relations: umlRelations as unknown as Json,
-        flowchart_nodes: flowchartNodes as unknown as Json,
+        flowchart_nodes: safeFlowchartNodes as unknown as Json,
         flowchart_connections: flowchartConnections as unknown as Json,
-        sequence_participants: sequenceParticipants as unknown as Json,
+        sequence_participants: safeSequenceParticipants as unknown as Json,
         sequence_messages: sequenceMessages as unknown as Json,
-        viewport: viewport as Json,
+        viewport: safeViewport as unknown as Json,
         is_dark_mode: isDarkMode,
       });
       
@@ -1932,7 +1992,7 @@ const selectedTableRelationships = useMemo(() => {
           </button>
 
           <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
+            onClick={() => toggleTheme()}
             title="Toggle Theme"
             className="p-2.5 hover:bg-amber-500/15 rounded-xl text-amber-500 transition-all duration-200 active:scale-95 hover:scale-110"
           >
@@ -2347,6 +2407,19 @@ const selectedTableRelationships = useMemo(() => {
             {diagramType === 'flowchart' && (
               <>
                 <svg className="absolute inset-0 pointer-events-none overflow-visible w-[5000px] h-[5000px]">
+                  <defs>
+                    <marker
+                      id="fc-arrow"
+                      markerWidth="10"
+                      markerHeight="7"
+                      refX="9"
+                      refY="3.5"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
+                    </marker>
+                  </defs>
                   {flowchartConnections.map((conn) => {
                     const sourceNode = flowchartNodes.find(n => n.id === conn.sourceNodeId);
                     const targetNode = flowchartNodes.find(n => n.id === conn.targetNodeId);
@@ -2356,24 +2429,62 @@ const selectedTableRelationships = useMemo(() => {
                     const sy = sourceNode.y + 25;
                     const tx = targetNode.x + 60;
                     const ty = targetNode.y + 25;
-                    const path = conn.lineType === 'curved'
-                      ? `M ${sx} ${sy} Q ${(sx + tx) / 2} ${sy} ${tx} ${ty}`
-                      : `M ${sx} ${sy} L ${tx} ${ty}`;
+
+                    const connectionType = (conn.connectionType ?? 'arrow') as import('./types/uml').FlowchartConnectionType;
+                    const isSelected = selectedFlowchartConnectionId === conn.id;
+
+                    const dashArray =
+                      connectionType === 'dashed'
+                        ? '8 6'
+                        : connectionType === 'dotted'
+                          ? '2 6'
+                          : undefined;
+
+                    const markerStart = connectionType === 'bidirectional' ? 'url(#fc-arrow)' : undefined;
+                    const markerEnd = 'url(#fc-arrow)';
+
+                    const dx = tx - sx;
+                    const dy = ty - sy;
+                    const dist = Math.max(1, Math.hypot(dx, dy));
+                    const nx = -dy / dist;
+                    const ny = dx / dist;
+                    const baseOffset = 80;
+                    const offset = connectionType === 'loop-back' ? baseOffset * 1.6 : baseOffset;
+
+                    const path =
+                      connectionType === 'loop-back'
+                        ? `M ${sx} ${sy} C ${sx + nx * offset} ${sy + ny * offset}, ${tx + nx * offset} ${ty + ny * offset}, ${tx} ${ty}`
+                        : conn.lineType === 'curved'
+                          ? `M ${sx} ${sy} Q ${(sx + tx) / 2 + nx * 30} ${(sy + ty) / 2 + ny * 30} ${tx} ${ty}`
+                          : `M ${sx} ${sy} L ${tx} ${ty}`;
 
                     return (
-                      <g key={conn.id} className="pointer-events-auto cursor-pointer">
+                      <g
+                        key={conn.id}
+                        className="pointer-events-auto cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFlowchartConnectionId(conn.id);
+                          setSelectedFlowchartNodeId(null);
+                        }}
+                      >
                         <path
                           d={path}
                           fill="none"
-                          stroke={selectedFlowchartConnectionId === conn.id ? '#6366f1' : isDarkMode ? '#475569' : '#94a3b8'}
-                          strokeWidth={selectedFlowchartConnectionId === conn.id ? 3 : 2}
-                          markerEnd="url(#arrowhead)"
+                          stroke="currentColor"
+                          strokeWidth={isSelected ? 3 : 2}
+                          strokeDasharray={dashArray}
+                          markerStart={markerStart}
+                          markerEnd={markerEnd}
+                          style={{
+                            color: isSelected ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+                          }}
                         />
                         {conn.label && (
                           <text
                             x={(sx + tx) / 2}
                             y={(sy + ty) / 2 - 8}
-                            fill={isDarkMode ? '#94a3b8' : '#475569'}
+                            fill={'hsl(var(--muted-foreground))'}
                             fontSize="10"
                             textAnchor="middle"
                           >
@@ -2383,22 +2494,6 @@ const selectedTableRelationships = useMemo(() => {
                       </g>
                     );
                   })}
-                  {/* Arrowhead marker */}
-                  <defs>
-                    <marker
-                      id="arrowhead"
-                      markerWidth="10"
-                      markerHeight="7"
-                      refX="9"
-                      refY="3.5"
-                      orient="auto"
-                    >
-                      <polygon
-                        points="0 0, 10 3.5, 0 7"
-                        fill={isDarkMode ? '#475569' : '#94a3b8'}
-                      />
-                    </marker>
-                  </defs>
                 </svg>
 
                 {flowchartNodes.map((node) => (
@@ -2415,10 +2510,12 @@ const selectedTableRelationships = useMemo(() => {
                           sourceNodeId: connectionSource,
                           targetNodeId: node.id,
                           lineType: 'curved',
+                          connectionType: pendingFlowchartConnectionType,
                         };
                         setFlowchartConnections(prev => [...prev, newConnection]);
                         setIsDrawingConnection(false);
                         setConnectionSource(null);
+                        setSelectedFlowchartConnectionId(newConnection.id);
                         push({ title: "Connection created", type: "success" });
                       } else {
                         setSelectedFlowchartNodeId(node.id);
@@ -2535,6 +2632,7 @@ const selectedTableRelationships = useMemo(() => {
               isDrawing={diagramType === 'uml-class' ? isDrawingUmlRelation : isDrawingConnection}
               diagramType={diagramType as 'uml-class' | 'flowchart'}
               selectedRelationType={pendingUmlRelationType}
+              selectedConnectionType={pendingFlowchartConnectionType}
               onStartConnection={() => {
                 if (diagramType === 'uml-class' && selectedUmlClassId) {
                   setIsDrawingUmlRelation(true);
@@ -2555,6 +2653,7 @@ const selectedTableRelationships = useMemo(() => {
                 setConnectionSource(null);
               }}
               onSelectRelationType={(type) => setPendingUmlRelationType(type)}
+              onSelectConnectionType={(type) => setPendingFlowchartConnectionType(type)}
               isDarkMode={isDarkMode}
             />
           )}
@@ -2563,12 +2662,13 @@ const selectedTableRelationships = useMemo(() => {
           {diagramType === 'flowchart' && (
             <FlowchartToolbox
               onAddNode={(type) => {
+                  const center = getCanvasCenterWorld();
                 const newNode: FlowchartNodeType = {
                   id: generateId(),
                   type,
                   label: type === 'start-end' ? 'Start' : type === 'decision' ? 'Condition?' : 'Process',
-                  x: (window.innerWidth / 2 - viewport.x) / viewport.zoom,
-                  y: (window.innerHeight / 2 - viewport.y) / viewport.zoom,
+                    x: center.x,
+                    y: center.y,
                 };
                 setFlowchartNodes(prev => [...prev, newNode]);
                 setSelectedFlowchartNodeId(newNode.id);
@@ -3541,12 +3641,13 @@ const selectedTableRelationships = useMemo(() => {
                 
                 <button
                   onClick={() => {
+                    const center = getCanvasCenterWorld();
                     const newClass: UMLClass = {
                       id: generateId(),
                       name: 'NewClass',
                       stereotype: undefined,
-                      x: (window.innerWidth / 2 - viewport.x) / viewport.zoom,
-                      y: (window.innerHeight / 2 - viewport.y) / viewport.zoom,
+                      x: center.x,
+                      y: center.y,
                       attributes: [],
                       methods: [],
                     };
