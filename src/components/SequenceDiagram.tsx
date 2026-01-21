@@ -177,7 +177,7 @@ interface SequenceEditorProps {
   onAddParticipant: (type: SequenceParticipant['type']) => void;
   onUpdateParticipant: (id: string, updates: Partial<SequenceParticipant>) => void;
   onDeleteParticipant: (id: string) => void;
-  onAddMessage: () => void;
+  onAddMessage: (fromId: string, toId: string, label: string, type: SequenceMessage['type']) => void;
   onUpdateMessage: (id: string, updates: Partial<SequenceMessage>) => void;
   onDeleteMessage: (id: string) => void;
 }
@@ -340,8 +340,10 @@ export function SequenceEditor({
           <button
             onClick={() => {
               if (newMessageFrom && newMessageTo && newMessageFrom !== newMessageTo) {
-                onAddMessage();
+                onAddMessage(newMessageFrom, newMessageTo, newMessageLabel || 'message()', newMessageType);
                 setNewMessageLabel('');
+                setNewMessageFrom('');
+                setNewMessageTo('');
               }
             }}
             disabled={isLocked || !newMessageFrom || !newMessageTo || newMessageFrom === newMessageTo}
