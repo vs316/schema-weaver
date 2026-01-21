@@ -85,8 +85,8 @@ export type FlowchartConnectionType =
   | 'dashed'          // dashed line with arrow
   | 'dotted'          // dotted line
   | 'bidirectional'   // arrow on both ends
-  | 'conditional-yes' // labeled "Yes" 
-  | 'conditional-no'  // labeled "No"
+  | 'conditional-yes' // labeled "Yes" - solid green
+  | 'conditional-no'  // labeled "No" - dashed red
   | 'loop-back';      // curved loop-back arrow
 
 export interface FlowchartConnection {

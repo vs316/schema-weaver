@@ -565,7 +565,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
             const { t, r, dark, time } = JSON.parse(saved);
             setTables(t || []);
             setRelations(r || []);
-            setIsDarkMode(dark ?? true);
+            setTheme((dark ?? true) ? "dark" : "light");
             setLastSaved(time || "Never");
           } catch (e) {
             console.error("Failed to load data from localStorage", e);
@@ -600,7 +600,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       suppressHistory.current = true;
       setTables(remoteTables);
       setRelations(remoteRelations);
-      setIsDarkMode(diagram.is_dark_mode ?? true);
+      setTheme((diagram.is_dark_mode ?? true) ? "dark" : "light");
       setIsLocked(diagram.is_locked ?? false);
       suppressHistory.current = false;
       
@@ -751,6 +751,80 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
     push({ title: "Viewport reset", type: "info" });
     pushHistory();
   }, [pushHistory, push]);
+
+  // Fit to Content - calculate bounds of all elements and center viewport
+  const fitToContent = useCallback(() => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasContent = false;
+
+    // Check based on diagram type
+    if (diagramType === 'erd') {
+      for (const t of tables) {
+        hasContent = true;
+        const tableHeight = HEADER_H + 20 + (t.columns?.length ?? 0) * 16;
+        minX = Math.min(minX, t.x);
+        minY = Math.min(minY, t.y);
+        maxX = Math.max(maxX, t.x + TABLE_W);
+        maxY = Math.max(maxY, t.y + tableHeight);
+      }
+    } else if (diagramType === 'uml-class') {
+      for (const c of umlClasses) {
+        hasContent = true;
+        const classHeight = 80 + (c.attributes?.length ?? 0) * 16 + (c.methods?.length ?? 0) * 16;
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + 180);
+        maxY = Math.max(maxY, c.y + classHeight);
+      }
+    } else if (diagramType === 'flowchart') {
+      for (const n of flowchartNodes) {
+        hasContent = true;
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + 120);
+        maxY = Math.max(maxY, n.y + 60);
+      }
+    } else if (diagramType === 'sequence') {
+      for (const p of sequenceParticipants) {
+        hasContent = true;
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, 50); // Participants are at fixed Y
+        maxX = Math.max(maxX, p.x + 100);
+        maxY = Math.max(maxY, 200 + sequenceMessages.length * 50);
+      }
+    }
+
+    if (!hasContent) {
+      resetViewport();
+      return;
+    }
+
+    // Add padding
+    const padding = 100;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    // Calculate zoom to fit
+    const canvasWidth = canvasRef.current?.clientWidth ?? 1000;
+    const canvasHeight = canvasRef.current?.clientHeight ?? 800;
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    const zoomX = canvasWidth / contentWidth;
+    const zoomY = canvasHeight / contentHeight;
+    const zoom = Math.min(zoomX, zoomY, 1.5); // Max zoom of 1.5
+
+    // Center the content
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const newX = canvasWidth / 2 - centerX * zoom;
+    const newY = canvasHeight / 2 - centerY * zoom;
+
+    setViewport({ x: newX, y: newY, zoom: Math.max(0.2, zoom) });
+    push({ title: "Fit to content", type: "info" });
+  }, [diagramType, tables, umlClasses, flowchartNodes, sequenceParticipants, sequenceMessages.length, resetViewport, push]);
 
   const activeSelectedTableIds = useMemo(() => {
     if (multiSelectedTableIds.size > 0) return new Set(multiSelectedTableIds);
@@ -1991,6 +2065,17 @@ const selectedTableRelationships = useMemo(() => {
             <Maximize size={20} />
           </button>
 
+          {/* Fit to Content - for non-ERD diagrams */}
+          {diagramType !== 'erd' && (
+            <button
+              onClick={fitToContent}
+              title="Fit to Content"
+              className="p-2.5 hover:bg-indigo-500/15 rounded-xl text-indigo-400 transition-all duration-200 active:scale-95 hover:scale-110"
+            >
+              <Minimize size={20} />
+            </button>
+          )}
+
           <button
             onClick={() => toggleTheme()}
             title="Toggle Theme"
@@ -2419,6 +2504,17 @@ const selectedTableRelationships = useMemo(() => {
                     >
                       <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
                     </marker>
+                    <marker
+                      id="fc-arrow-start"
+                      markerWidth="10"
+                      markerHeight="7"
+                      refX="1"
+                      refY="3.5"
+                      orient="auto-start-reverse"
+                      markerUnits="strokeWidth"
+                    >
+                      <polygon points="10 0, 0 3.5, 10 7" fill="currentColor" />
+                    </marker>
                   </defs>
                   {flowchartConnections.map((conn) => {
                     const sourceNode = flowchartNodes.find(n => n.id === conn.sourceNodeId);
@@ -2433,14 +2529,15 @@ const selectedTableRelationships = useMemo(() => {
                     const connectionType = (conn.connectionType ?? 'arrow') as import('./types/uml').FlowchartConnectionType;
                     const isSelected = selectedFlowchartConnectionId === conn.id;
 
+                    // Dash arrays for different connection types
                     const dashArray =
-                      connectionType === 'dashed'
+                      connectionType === 'dashed' || connectionType === 'conditional-no'
                         ? '8 6'
                         : connectionType === 'dotted'
                           ? '2 6'
                           : undefined;
 
-                    const markerStart = connectionType === 'bidirectional' ? 'url(#fc-arrow)' : undefined;
+                    const markerStart = connectionType === 'bidirectional' ? 'url(#fc-arrow-start)' : undefined;
                     const markerEnd = 'url(#fc-arrow)';
 
                     const dx = tx - sx;
@@ -2451,12 +2548,26 @@ const selectedTableRelationships = useMemo(() => {
                     const baseOffset = 80;
                     const offset = connectionType === 'loop-back' ? baseOffset * 1.6 : baseOffset;
 
-                    const path =
-                      connectionType === 'loop-back'
-                        ? `M ${sx} ${sy} C ${sx + nx * offset} ${sy + ny * offset}, ${tx + nx * offset} ${ty + ny * offset}, ${tx} ${ty}`
-                        : conn.lineType === 'curved'
-                          ? `M ${sx} ${sy} Q ${(sx + tx) / 2 + nx * 30} ${(sy + ty) / 2 + ny * 30} ${tx} ${ty}`
-                          : `M ${sx} ${sy} L ${tx} ${ty}`;
+                    // Calculate path based on connection type
+                    const isLoopBack = connectionType === 'loop-back';
+                    const path = isLoopBack
+                      ? `M ${sx} ${sy} C ${sx + nx * offset} ${sy + ny * offset}, ${tx + nx * offset} ${ty + ny * offset}, ${tx} ${ty}`
+                      : conn.lineType === 'curved'
+                        ? `M ${sx} ${sy} Q ${(sx + tx) / 2 + nx * 30} ${(sy + ty) / 2 + ny * 30} ${tx} ${ty}`
+                        : `M ${sx} ${sy} L ${tx} ${ty}`;
+
+                    // Calculate label position - midpoint with offset to avoid overlap
+                    const labelX = isLoopBack 
+                      ? (sx + tx) / 2 + nx * offset * 0.5
+                      : (sx + tx) / 2 + nx * 10;
+                    const labelY = isLoopBack 
+                      ? (sy + ty) / 2 + ny * offset * 0.5 - 5
+                      : (sy + ty) / 2 + ny * 10 - 5;
+
+                    // Display label (use connection label or auto-label for Yes/No types)
+                    const displayLabel = conn.label || 
+                      (connectionType === 'conditional-yes' ? 'Yes' : 
+                       connectionType === 'conditional-no' ? 'No' : undefined);
 
                     return (
                       <g
@@ -2468,6 +2579,26 @@ const selectedTableRelationships = useMemo(() => {
                           setSelectedFlowchartNodeId(null);
                         }}
                       >
+                        {/* Hit area - invisible wider path for easier selection */}
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke="transparent"
+                          strokeWidth={20}
+                          className="hover:stroke-primary/10"
+                        />
+                        {/* Selection highlight */}
+                        {isSelected && (
+                          <path
+                            d={path}
+                            fill="none"
+                            stroke="hsl(var(--primary))"
+                            strokeWidth={6}
+                            strokeOpacity={0.3}
+                            strokeDasharray={dashArray}
+                          />
+                        )}
+                        {/* Actual connection line */}
                         <path
                           d={path}
                           fill="none"
@@ -2480,16 +2611,31 @@ const selectedTableRelationships = useMemo(() => {
                             color: isSelected ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
                           }}
                         />
-                        {conn.label && (
-                          <text
-                            x={(sx + tx) / 2}
-                            y={(sy + ty) / 2 - 8}
-                            fill={'hsl(var(--muted-foreground))'}
-                            fontSize="10"
-                            textAnchor="middle"
-                          >
-                            {conn.label}
-                          </text>
+                        {/* Label with background for readability */}
+                        {displayLabel && (
+                          <>
+                            <rect
+                              x={labelX - 15}
+                              y={labelY - 8}
+                              width={30}
+                              height={14}
+                              rx={3}
+                              fill={isDarkMode ? 'hsl(var(--background))' : 'hsl(var(--background))'}
+                              fillOpacity={0.9}
+                            />
+                            <text
+                              x={labelX}
+                              y={labelY + 3}
+                              fill={connectionType === 'conditional-yes' ? 'hsl(var(--success, 142 76% 36%))' : 
+                                    connectionType === 'conditional-no' ? 'hsl(var(--destructive))' : 
+                                    'hsl(var(--muted-foreground))'}
+                              fontSize="10"
+                              fontWeight={connectionType === 'conditional-yes' || connectionType === 'conditional-no' ? '600' : '400'}
+                              textAnchor="middle"
+                            >
+                              {displayLabel}
+                            </text>
+                          </>
                         )}
                       </g>
                     );
@@ -2504,13 +2650,33 @@ const selectedTableRelationships = useMemo(() => {
                     isDarkMode={isDarkMode}
                     onSelect={() => {
                       if (isDrawingConnection && connectionSource && connectionSource !== node.id) {
-                        // Complete the connection
+                        // Find source node to check if it's a decision node
+                        const srcNode = flowchartNodes.find(n => n.id === connectionSource);
+                        const isFromDecision = srcNode?.type === 'decision';
+                        
+                        // Count existing connections from this decision node
+                        const existingFromDecision = flowchartConnections.filter(c => c.sourceNodeId === connectionSource);
+                        
+                        // Auto-set connection type for decision branches
+                        let autoConnectionType = pendingFlowchartConnectionType;
+                        let autoLabel = '';
+                        if (isFromDecision && pendingFlowchartConnectionType === 'arrow') {
+                          if (existingFromDecision.length === 0) {
+                            autoConnectionType = 'conditional-yes';
+                            autoLabel = 'Yes';
+                          } else if (existingFromDecision.length === 1) {
+                            autoConnectionType = 'conditional-no';
+                            autoLabel = 'No';
+                          }
+                        }
+                        
                         const newConnection: FlowchartConnection = {
                           id: generateId(),
                           sourceNodeId: connectionSource,
                           targetNodeId: node.id,
                           lineType: 'curved',
-                          connectionType: pendingFlowchartConnectionType,
+                          connectionType: autoConnectionType,
+                          label: autoLabel || undefined,
                         };
                         setFlowchartConnections(prev => [...prev, newConnection]);
                         setIsDrawingConnection(false);
@@ -3600,6 +3766,27 @@ const selectedTableRelationships = useMemo(() => {
                       ));
                       setSelectedUmlClassId(null);
                       push({ title: "Class deleted", type: "info" });
+                    }}
+                  />
+                );
+              })()
+            ) : diagramType === 'flowchart' && selectedFlowchartConnectionId ? (
+              (() => {
+                const selectedConn = flowchartConnections.find(c => c.id === selectedFlowchartConnectionId);
+                if (!selectedConn) return null;
+                return (
+                  <FlowchartConnectionEditor
+                    connection={selectedConn}
+                    isLocked={effectiveIsLocked}
+                    onUpdate={(updates) => {
+                      setFlowchartConnections(prev => prev.map(c => 
+                        c.id === selectedFlowchartConnectionId ? { ...c, ...updates } : c
+                      ));
+                    }}
+                    onDelete={() => {
+                      setFlowchartConnections(prev => prev.filter(c => c.id !== selectedFlowchartConnectionId));
+                      setSelectedFlowchartConnectionId(null);
+                      push({ title: "Connection deleted", type: "info" });
                     }}
                   />
                 );
