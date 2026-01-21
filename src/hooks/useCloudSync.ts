@@ -208,8 +208,10 @@ export function useCloudSync(userId?: string) {
         flowchart_connections: [],
         sequence_participants: [],
         sequence_messages: [],
-        viewport: {},
-        is_dark_mode: false,
+        // Avoid null/undefined viewport values which can cause NaN transforms in the canvas
+        viewport: { x: 0, y: 0, zoom: 1 },
+        // Default to dark; the UI will overwrite this to match the global ThemeProvider setting.
+        is_dark_mode: true,
         is_locked: false,
         team_id: teamId,
       })

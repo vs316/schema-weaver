@@ -1,17 +1,19 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link2, X, ArrowRight, ArrowUpRight } from 'lucide-react';
-import type { UMLRelationType } from '../types/uml';
-import { UML_RELATION_LABELS } from '../types/uml';
+import { Link2, X, ArrowRight, ArrowUpRight, ArrowLeftRight, CornerUpLeft } from 'lucide-react';
+import type { FlowchartConnectionType, UMLRelationType } from '../types/uml';
+import { FLOWCHART_CONNECTION_LABELS, UML_RELATION_LABELS } from '../types/uml';
 
 interface ConnectionToolbarProps {
   isVisible: boolean;
   isDrawing: boolean;
   diagramType: 'uml-class' | 'flowchart';
   selectedRelationType?: UMLRelationType;
+  selectedConnectionType?: FlowchartConnectionType;
   onStartConnection: () => void;
   onCancelConnection: () => void;
   onSelectRelationType?: (type: UMLRelationType) => void;
+  onSelectConnectionType?: (type: FlowchartConnectionType) => void;
   isDarkMode: boolean;
 }
 
@@ -25,14 +27,27 @@ const UML_RELATION_ICONS: Record<UMLRelationType, React.ReactNode> = {
   realization: <div className="w-4 h-0.5" style={{ borderTop: '2px dashed currentColor' }} />,
 };
 
+const FLOWCHART_CONNECTION_ICONS: Record<FlowchartConnectionType, React.ReactNode> = {
+  arrow: <ArrowRight size={14} />,
+  dashed: <div className="w-4 h-0.5" style={{ borderTop: '2px dashed currentColor' }} />,
+  dotted: <div className="w-4 h-0.5" style={{ borderTop: '2px dotted currentColor' }} />,
+  bidirectional: <ArrowLeftRight size={14} />,
+  'loop-back': <CornerUpLeft size={14} />,
+  // Not shown in the UI picker for now, but kept for completeness
+  'conditional-yes': <div className="text-[10px] font-bold">Y</div>,
+  'conditional-no': <div className="text-[10px] font-bold">N</div>,
+};
+
 export function ConnectionToolbar({
   isVisible,
   isDrawing,
   diagramType,
   selectedRelationType = 'association',
+  selectedConnectionType = 'arrow',
   onStartConnection,
   onCancelConnection,
   onSelectRelationType,
+  onSelectConnectionType,
   isDarkMode,
 }: ConnectionToolbarProps) {
   return (
@@ -85,12 +100,45 @@ export function ConnectionToolbar({
                   </div>
                 )}
 
+                {diagramType === 'flowchart' && onSelectConnectionType && (
+                  <div className="flex items-center gap-1 mr-2">
+                    {([
+                      'arrow',
+                      'dashed',
+                      'dotted',
+                      'bidirectional',
+                      'loop-back',
+                    ] as FlowchartConnectionType[]).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => onSelectConnectionType(type)}
+                        className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
+                          selectedConnectionType === type ? 'ring-2 ring-primary scale-110' : 'hover:scale-105'
+                        }`}
+                        style={{
+                          background:
+                            selectedConnectionType === type
+                              ? 'hsl(var(--primary) / 0.12)'
+                              : 'hsl(var(--muted))',
+                          color:
+                            selectedConnectionType === type
+                              ? 'hsl(var(--primary))'
+                              : 'hsl(var(--muted-foreground))',
+                        }}
+                        title={FLOWCHART_CONNECTION_LABELS[type]}
+                      >
+                        {FLOWCHART_CONNECTION_ICONS[type]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <motion.button
                   onClick={onStartConnection}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-medium text-xs"
                   style={{
-                    background: 'hsl(239 84% 67%)',
-                    color: 'white',
+                    background: 'hsl(var(--primary))',
+                    color: 'hsl(var(--primary-foreground))',
                   }}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
