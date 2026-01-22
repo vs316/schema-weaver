@@ -228,6 +228,12 @@ function ERDBuilder({
   const [edgeDragStart, setEdgeDragStart] = useState<{ x: number; y: number } | null>(null);
   const [edgeDragStartBend, setEdgeDragStartBend] = useState<{ x: number; y: number } | null>(null);
 
+  // Flowchart connection bend/waypoint dragging (single control point)
+  const [isDraggingFlowchartBend, setIsDraggingFlowchartBend] = useState(false);
+  const [draggedFlowchartConnectionId, setDraggedFlowchartConnectionId] = useState<string | null>(null);
+  const [flowchartBendDragStart, setFlowchartBendDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [flowchartBendDragStartBend, setFlowchartBendDragStartBend] = useState<{ x: number; y: number } | null>(null);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const normalizeViewport = useCallback((raw: any) => {
@@ -1092,6 +1098,38 @@ const selectedTableRelationships = useMemo(() => {
     return;
   }
 
+  // FLOWCHART CONNECTION BEND - Second priority (alongside ERD edge bends)
+  if (
+    isDraggingFlowchartBend &&
+    draggedFlowchartConnectionId &&
+    flowchartBendDragStart &&
+    flowchartBendDragStartBend &&
+    !isPanning
+  ) {
+    const world = toWorld(e.clientX, e.clientY);
+    const dx = world.x - flowchartBendDragStart.x;
+    const dy = world.y - flowchartBendDragStart.y;
+
+    setFlowchartConnections((prev) =>
+      prev.map((c) =>
+        c.id === draggedFlowchartConnectionId
+          ? {
+              ...c,
+              bend: {
+                x: flowchartBendDragStartBend.x + dx,
+                y: flowchartBendDragStartBend.y + dy,
+              },
+              // dragging implies a curved route
+              lineType: c.connectionType === 'loop-back' ? c.lineType : 'curved',
+            }
+          : c
+      )
+    );
+
+    lastActionWasDrag.current = true;
+    return;
+  }
+
   // LASSO SELECTION - Third priority
   if (isLassoing && lassoStart && !isPanning) {
     const world = toWorld(e.clientX, e.clientY);
@@ -1218,6 +1256,13 @@ const selectedTableRelationships = useMemo(() => {
       setDraggedEdgeId(null);
       setEdgeDragStart(null);
       setEdgeDragStartBend(null);
+    }
+
+    if (isDraggingFlowchartBend) {
+      setIsDraggingFlowchartBend(false);
+      setDraggedFlowchartConnectionId(null);
+      setFlowchartBendDragStart(null);
+      setFlowchartBendDragStartBend(null);
     }
 
     if (isLassoing) {
@@ -1699,6 +1744,10 @@ const selectedTableRelationships = useMemo(() => {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrlOrCmd = e.ctrlKey || e.metaKey;
+
+      // If typing in an input/textarea, ignore non-ctrl shortcuts
+      const activeElement = document.activeElement;
+      const isTyping = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
       if (ctrlOrCmd && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -1785,16 +1834,66 @@ const selectedTableRelationships = useMemo(() => {
         setShowKeyboardShortcuts(false);
       } else if (e.key.toLowerCase() === "n" && !ctrlOrCmd && !e.shiftKey) {
         // Add new table with N key (only if not typing in an input)
-        const activeElement = document.activeElement;
-        if (activeElement?.tagName !== 'INPUT' && activeElement?.tagName !== 'TEXTAREA') {
+        if (!isTyping) {
           e.preventDefault();
           addTable();
+        }
+      } else if (!ctrlOrCmd && !e.shiftKey && !isTyping && e.key.toLowerCase() === 'f') {
+        // Fit to content (Flowchart/UML/Sequence)
+        if (diagramType !== 'erd') {
+          e.preventDefault();
+          fitToContent();
+        }
+      } else if (!ctrlOrCmd && !e.shiftKey && !isTyping && e.key.toLowerCase() === 'c') {
+        // Start/Cancel flowchart connection drawing
+        if (diagramType === 'flowchart') {
+          e.preventDefault();
+          if (effectiveIsLocked) {
+            push({ title: 'Diagram is locked', type: 'info' });
+            return;
+          }
+          if (isDrawingConnection) {
+            setIsDrawingConnection(false);
+            setConnectionSource(null);
+            push({ title: 'Connection cancelled', type: 'info' });
+            return;
+          }
+          if (!selectedFlowchartNodeId) {
+            push({ title: 'Select a node first', type: 'info' });
+            return;
+          }
+          setIsDrawingConnection(true);
+          setConnectionSource(selectedFlowchartNodeId);
+          push({ title: 'Click target node', type: 'info' });
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedTableId, selectedEdgeId, tables, relations, isGridSnap, undo, redo, duplicateTable, exportJSON, exportPNG, resetViewport, pushHistory, push, zoomIn, zoomOut, showKeyboardShortcuts, addTable]);
+  }, [
+    selectedTableId,
+    selectedEdgeId,
+    tables,
+    relations,
+    isGridSnap,
+    undo,
+    redo,
+    duplicateTable,
+    exportJSON,
+    exportPNG,
+    resetViewport,
+    pushHistory,
+    push,
+    zoomIn,
+    zoomOut,
+    showKeyboardShortcuts,
+    addTable,
+    diagramType,
+    fitToContent,
+    effectiveIsLocked,
+    isDrawingConnection,
+    selectedFlowchartNodeId,
+  ]);
 
   // --- SCHEMA TEMPLATES ---
   const templates: { name: string; apply: () => void }[] = [
@@ -2548,12 +2647,23 @@ const selectedTableRelationships = useMemo(() => {
                     const baseOffset = 80;
                     const offset = connectionType === 'loop-back' ? baseOffset * 1.6 : baseOffset;
 
+                    // Bend/control handling
+                    const midX = (sx + tx) / 2;
+                    const midY = (sy + ty) / 2;
+                    const defaultQuadControl = { x: midX + nx * 30, y: midY + ny * 30 };
+                    const bendPoint = conn.bend ?? defaultQuadControl;
+
+                    // For loop-back, treat bendPoint as a handle around the midpoint, and derive the offset vector
+                    const loopVec = { x: bendPoint.x - midX, y: bendPoint.y - midY };
+                    const loopDefaultVec = { x: nx * offset, y: ny * offset };
+                    const loopV = conn.bend ? loopVec : loopDefaultVec;
+
                     // Calculate path based on connection type
                     const isLoopBack = connectionType === 'loop-back';
                     const path = isLoopBack
-                      ? `M ${sx} ${sy} C ${sx + nx * offset} ${sy + ny * offset}, ${tx + nx * offset} ${ty + ny * offset}, ${tx} ${ty}`
+                      ? `M ${sx} ${sy} C ${sx + loopV.x} ${sy + loopV.y}, ${tx + loopV.x} ${ty + loopV.y}, ${tx} ${ty}`
                       : conn.lineType === 'curved'
-                        ? `M ${sx} ${sy} Q ${(sx + tx) / 2 + nx * 30} ${(sy + ty) / 2 + ny * 30} ${tx} ${ty}`
+                        ? `M ${sx} ${sy} Q ${bendPoint.x} ${bendPoint.y} ${tx} ${ty}`
                         : `M ${sx} ${sy} L ${tx} ${ty}`;
 
                     // Calculate label position - midpoint with offset to avoid overlap
@@ -2563,6 +2673,11 @@ const selectedTableRelationships = useMemo(() => {
                     const labelY = isLoopBack 
                       ? (sy + ty) / 2 + ny * offset * 0.5 - 5
                       : (sy + ty) / 2 + ny * 10 - 5;
+
+                    // Bend handle position
+                    const handlePos = isLoopBack
+                      ? { x: midX + loopV.x, y: midY + loopV.y }
+                      : bendPoint;
 
                     // Display label (use connection label or auto-label for Yes/No types)
                     const displayLabel = conn.label || 
@@ -2636,6 +2751,42 @@ const selectedTableRelationships = useMemo(() => {
                               {displayLabel}
                             </text>
                           </>
+                        )}
+
+                        {/* Bend/waypoint handle (selected + unlocked) */}
+                        {isSelected && !effectiveIsLocked && (
+                          <circle
+                            cx={handlePos.x}
+                            cy={handlePos.y}
+                            r={6}
+                            fill="hsl(var(--background))"
+                            stroke="hsl(var(--primary))"
+                            strokeWidth={2}
+                            style={{ cursor: 'grab' }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+
+                              const world = toWorld((e as any).clientX, (e as any).clientY);
+                              setIsDraggingFlowchartBend(true);
+                              setDraggedFlowchartConnectionId(conn.id);
+                              setFlowchartBendDragStart(world);
+
+                              // If straight, begin by turning it into a curved path
+                              const startBend = conn.lineType === 'curved' || isLoopBack ? handlePos : defaultQuadControl;
+                              setFlowchartBendDragStartBend(startBend);
+
+                              if (conn.lineType === 'straight' && !isLoopBack) {
+                                setFlowchartConnections((prev) =>
+                                  prev.map((c) =>
+                                    c.id === conn.id
+                                      ? { ...c, lineType: 'curved', bend: startBend }
+                                      : c
+                                  )
+                                );
+                              }
+                            }}
+                          />
                         )}
                       </g>
                     );

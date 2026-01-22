@@ -96,6 +96,13 @@ export interface FlowchartConnection {
   label?: string;      // like "Yes", "No" for decisions
   lineType: 'straight' | 'curved';
   connectionType?: FlowchartConnectionType;
+  /**
+   * Optional bend/control point in world coords.
+   * - For `lineType === 'curved'`: this is the quadratic control point.
+   * - For `connectionType === 'loop-back'`: this represents the draggable handle point;
+   *   the curve offset is derived from its delta to the segment midpoint.
+   */
+  bend?: { x: number; y: number };
 }
 
 // Sequence Diagram Types (future expansion)
