@@ -103,6 +103,9 @@ export interface FlowchartConnection {
    *   the curve offset is derived from its delta to the segment midpoint.
    */
   bend?: { x: number; y: number };
+
+  /** Optional routing waypoints (polyline). When present (length>0), they take precedence for rendering. */
+  waypoints?: Array<{ x: number; y: number }>;
 }
 
 // Sequence Diagram Types (future expansion)
