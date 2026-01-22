@@ -234,6 +234,15 @@ function ERDBuilder({
   const [flowchartBendDragStart, setFlowchartBendDragStart] = useState<{ x: number; y: number } | null>(null);
   const [flowchartBendDragStartBend, setFlowchartBendDragStartBend] = useState<{ x: number; y: number } | null>(null);
 
+  // Flowchart multi-waypoint dragging
+  const [isDraggingFlowchartWaypoint, setIsDraggingFlowchartWaypoint] = useState(false);
+  const [draggedFlowchartWaypoint, setDraggedFlowchartWaypoint] = useState<{ connectionId: string; index: number } | null>(null);
+  const [flowchartWaypointDragStart, setFlowchartWaypointDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [flowchartWaypointDragStartPos, setFlowchartWaypointDragStartPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Flowchart ghost preview while drawing a connection
+  const [flowchartGhostTarget, setFlowchartGhostTarget] = useState<{ x: number; y: number } | null>(null);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const normalizeViewport = useCallback((raw: any) => {
@@ -1026,6 +1035,11 @@ const selectedTableRelationships = useMemo(() => {
     const worldPos = toWorld(e.clientX, e.clientY);
     updateCursor(worldPos.x, worldPos.y);
 
+    // Flowchart ghost preview
+    if (diagramType === 'flowchart' && isDrawingConnection && connectionSource) {
+      setFlowchartGhostTarget(worldPos);
+    }
+
   // TABLE/UML/FLOWCHART DRAG - Using absolute positioning for smooth movement
   if (isDragging && draggedTableId && !isPanning && initialDragPosRef.current) {
     const world = toWorld(e.clientX, e.clientY);
@@ -1110,20 +1124,124 @@ const selectedTableRelationships = useMemo(() => {
     const dx = world.x - flowchartBendDragStart.x;
     const dy = world.y - flowchartBendDragStart.y;
 
+    let nextBend = {
+      x: flowchartBendDragStartBend.x + dx,
+      y: flowchartBendDragStartBend.y + dy,
+    };
+    if (isGridSnap) {
+      nextBend = {
+        x: Math.round(nextBend.x / GRID_SIZE) * GRID_SIZE,
+        y: Math.round(nextBend.y / GRID_SIZE) * GRID_SIZE,
+      };
+    }
+
+    // soft repel from node bounding boxes
+    const repelFromNodes = (p: { x: number; y: number }) => {
+      const padding = 18;
+      const strength = 0.65;
+      let out = { ...p };
+      for (const n of flowchartNodes) {
+        const left = n.x - padding;
+        const top = n.y - padding;
+        const right = n.x + 120 + padding;
+        const bottom = n.y + 60 + padding;
+        const inside = out.x >= left && out.x <= right && out.y >= top && out.y <= bottom;
+        if (!inside) continue;
+
+        const dl = Math.abs(out.x - left);
+        const dr = Math.abs(right - out.x);
+        const dt = Math.abs(out.y - top);
+        const db = Math.abs(bottom - out.y);
+        const min = Math.min(dl, dr, dt, db);
+
+        if (min === dl) out.x = out.x + (left - out.x) * (1 - strength);
+        else if (min === dr) out.x = out.x + (right - out.x) * (1 - strength);
+        else if (min === dt) out.y = out.y + (top - out.y) * (1 - strength);
+        else out.y = out.y + (bottom - out.y) * (1 - strength);
+      }
+      return out;
+    };
+    nextBend = repelFromNodes(nextBend);
+
     setFlowchartConnections((prev) =>
       prev.map((c) =>
         c.id === draggedFlowchartConnectionId
           ? {
               ...c,
-              bend: {
-                x: flowchartBendDragStartBend.x + dx,
-                y: flowchartBendDragStartBend.y + dy,
-              },
+              bend: nextBend,
               // dragging implies a curved route
               lineType: c.connectionType === 'loop-back' ? c.lineType : 'curved',
             }
           : c
       )
+    );
+
+    lastActionWasDrag.current = true;
+    return;
+  }
+
+  // FLOWCHART WAYPOINT DRAG
+  if (
+    isDraggingFlowchartWaypoint &&
+    draggedFlowchartWaypoint &&
+    flowchartWaypointDragStart &&
+    flowchartWaypointDragStartPos &&
+    !isPanning
+  ) {
+    const world = toWorld(e.clientX, e.clientY);
+    const dx = world.x - flowchartWaypointDragStart.x;
+    const dy = world.y - flowchartWaypointDragStart.y;
+
+    let nextPoint = {
+      x: flowchartWaypointDragStartPos.x + dx,
+      y: flowchartWaypointDragStartPos.y + dy,
+    };
+    if (isGridSnap) {
+      nextPoint = {
+        x: Math.round(nextPoint.x / GRID_SIZE) * GRID_SIZE,
+        y: Math.round(nextPoint.y / GRID_SIZE) * GRID_SIZE,
+      };
+    }
+
+    // soft repel from node bounding boxes
+    const repelFromNodes = (p: { x: number; y: number }) => {
+      const padding = 18;
+      const strength = 0.65;
+      let out = { ...p };
+      for (const n of flowchartNodes) {
+        // expanded bbox
+        const left = n.x - padding;
+        const top = n.y - padding;
+        const right = n.x + 120 + padding;
+        const bottom = n.y + 60 + padding;
+        const inside = out.x >= left && out.x <= right && out.y >= top && out.y <= bottom;
+        if (!inside) continue;
+
+        // push toward nearest edge
+        const dl = Math.abs(out.x - left);
+        const dr = Math.abs(right - out.x);
+        const dt = Math.abs(out.y - top);
+        const db = Math.abs(bottom - out.y);
+        const min = Math.min(dl, dr, dt, db);
+
+        if (min === dl) out.x = out.x + (left - out.x) * (1 - strength);
+        else if (min === dr) out.x = out.x + (right - out.x) * (1 - strength);
+        else if (min === dt) out.y = out.y + (top - out.y) * (1 - strength);
+        else out.y = out.y + (bottom - out.y) * (1 - strength);
+      }
+      return out;
+    };
+
+    nextPoint = repelFromNodes(nextPoint);
+
+    setFlowchartConnections((prev) =>
+      prev.map((c) => {
+        if (c.id !== draggedFlowchartWaypoint.connectionId) return c;
+        const wps = [...(c.waypoints ?? [])];
+        if (!wps[draggedFlowchartWaypoint.index]) return c;
+        wps[draggedFlowchartWaypoint.index] = nextPoint;
+        return { ...c, waypoints: wps };
+      })
     );
 
     lastActionWasDrag.current = true;
@@ -1265,6 +1383,13 @@ const selectedTableRelationships = useMemo(() => {
       setFlowchartBendDragStartBend(null);
     }
 
+    if (isDraggingFlowchartWaypoint) {
+      setIsDraggingFlowchartWaypoint(false);
+      setDraggedFlowchartWaypoint(null);
+      setFlowchartWaypointDragStart(null);
+      setFlowchartWaypointDragStartPos(null);
+    }
+
     if (isLassoing) {
       setIsLassoing(false);
       setLassoStart(null);
@@ -1279,6 +1404,26 @@ const selectedTableRelationships = useMemo(() => {
       lastActionWasDrag.current = false;
     }
   };
+
+  const addFlowchartNode = useCallback((type: import('./types/uml').FlowchartNodeType) => {
+    if (effectiveIsLocked) {
+      push({ title: 'Diagram is locked', type: 'info' });
+      return;
+    }
+    const center = getCanvasCenterWorld();
+    const nodeType = type;
+    const newNode: FlowchartNodeType = {
+      id: generateId(),
+      type: nodeType,
+      label: nodeType === 'start-end' ? 'Start' : nodeType === 'decision' ? 'Condition?' : 'Process',
+      x: center.x,
+      y: center.y,
+    };
+    setFlowchartNodes((prev) => [...prev, newNode]);
+    setSelectedFlowchartNodeId(newNode.id);
+    setSelectedFlowchartConnectionId(null);
+    push({ title: 'Node added', type: 'success' });
+  }, [effectiveIsLocked, getCanvasCenterWorld, push]);
 
   const addTable = useCallback(() => {
     // Feature 1: Check lock
@@ -1866,6 +2011,18 @@ const selectedTableRelationships = useMemo(() => {
           setConnectionSource(selectedFlowchartNodeId);
           push({ title: 'Click target node', type: 'info' });
         }
+      } else if (!ctrlOrCmd && !e.shiftKey && !isTyping && diagramType === 'flowchart') {
+        const k = e.key.toLowerCase();
+        if (k === 'd') {
+          e.preventDefault();
+          addFlowchartNode('decision');
+        } else if (k === 'p') {
+          e.preventDefault();
+          addFlowchartNode('process');
+        } else if (k === 's') {
+          e.preventDefault();
+          addFlowchartNode('start-end');
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -1893,6 +2050,7 @@ const selectedTableRelationships = useMemo(() => {
     effectiveIsLocked,
     isDrawingConnection,
     selectedFlowchartNodeId,
+    addFlowchartNode,
   ]);
 
   // --- SCHEMA TEMPLATES ---
@@ -2615,6 +2773,64 @@ const selectedTableRelationships = useMemo(() => {
                       <polygon points="10 0, 0 3.5, 10 7" fill="currentColor" />
                     </marker>
                   </defs>
+
+                  {/* Ghost preview while drawing a flowchart connection */}
+                  {isDrawingConnection && connectionSource && flowchartGhostTarget && (() => {
+                    const sourceNode = flowchartNodes.find(n => n.id === connectionSource);
+                    if (!sourceNode) return null;
+
+                    const sx = sourceNode.x + 60;
+                    const sy = sourceNode.y + 25;
+                    const tx = flowchartGhostTarget.x;
+                    const ty = flowchartGhostTarget.y;
+
+                    const connectionType = pendingFlowchartConnectionType;
+                    const dashArray =
+                      connectionType === 'dashed' || connectionType === 'conditional-no'
+                        ? '8 6'
+                        : connectionType === 'dotted'
+                          ? '2 6'
+                          : undefined;
+
+                    const markerStart = connectionType === 'bidirectional' ? 'url(#fc-arrow-start)' : undefined;
+                    const markerEnd = 'url(#fc-arrow)';
+
+                    const dx = tx - sx;
+                    const dy = ty - sy;
+                    const dist = Math.max(1, Math.hypot(dx, dy));
+                    const nx = -dy / dist;
+                    const ny = dx / dist;
+
+                    const isLoopBack = connectionType === 'loop-back';
+                    const baseOffset = 80;
+                    const offset = baseOffset * 1.6;
+                    const midX = (sx + tx) / 2;
+                    const midY = (sy + ty) / 2;
+                    const loopV = { x: nx * offset, y: ny * offset };
+
+                    const path = isLoopBack
+                      ? `M ${sx} ${sy} C ${sx + loopV.x} ${sy + loopV.y}, ${tx + loopV.x} ${ty + loopV.y}, ${tx} ${ty}`
+                      : `M ${sx} ${sy} Q ${midX + nx * 30} ${midY + ny * 30} ${tx} ${ty}`;
+
+                    return (
+                      <g className="pointer-events-none">
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeDasharray={dashArray}
+                          markerStart={markerStart}
+                          markerEnd={markerEnd}
+                          style={{
+                            color: 'hsl(var(--primary))',
+                            opacity: 0.55,
+                          }}
+                        />
+                      </g>
+                    );
+                  })()}
+
                   {flowchartConnections.map((conn) => {
                     const sourceNode = flowchartNodes.find(n => n.id === conn.sourceNodeId);
                     const targetNode = flowchartNodes.find(n => n.id === conn.targetNodeId);
@@ -2660,11 +2876,14 @@ const selectedTableRelationships = useMemo(() => {
 
                     // Calculate path based on connection type
                     const isLoopBack = connectionType === 'loop-back';
-                    const path = isLoopBack
-                      ? `M ${sx} ${sy} C ${sx + loopV.x} ${sy + loopV.y}, ${tx + loopV.x} ${ty + loopV.y}, ${tx} ${ty}`
-                      : conn.lineType === 'curved'
-                        ? `M ${sx} ${sy} Q ${bendPoint.x} ${bendPoint.y} ${tx} ${ty}`
-                        : `M ${sx} ${sy} L ${tx} ${ty}`;
+                    const hasWaypoints = (conn.waypoints?.length ?? 0) > 0;
+                    const path = hasWaypoints
+                      ? `M ${sx} ${sy} ${conn.waypoints!.map((p) => `L ${p.x} ${p.y}`).join(' ')} L ${tx} ${ty}`
+                      : isLoopBack
+                        ? `M ${sx} ${sy} C ${sx + loopV.x} ${sy + loopV.y}, ${tx + loopV.x} ${ty + loopV.y}, ${tx} ${ty}`
+                        : conn.lineType === 'curved'
+                          ? `M ${sx} ${sy} Q ${bendPoint.x} ${bendPoint.y} ${tx} ${ty}`
+                          : `M ${sx} ${sy} L ${tx} ${ty}`;
 
                     // Calculate label position - midpoint with offset to avoid overlap
                     const labelX = isLoopBack 
@@ -2690,6 +2909,24 @@ const selectedTableRelationships = useMemo(() => {
                         className="pointer-events-auto cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
+
+                           // Shift+click adds a waypoint at the click position
+                           if (e.shiftKey && !effectiveIsLocked) {
+                             const world = toWorld(e.clientX, e.clientY);
+                             setFlowchartConnections((prev) =>
+                               prev.map((c) => {
+                                 if (c.id !== conn.id) return c;
+                                 const wps = [...(c.waypoints ?? [])];
+                                 wps.push({ x: world.x, y: world.y });
+                                 return { ...c, waypoints: wps, lineType: 'straight' };
+                               })
+                             );
+                             setSelectedFlowchartConnectionId(conn.id);
+                             setSelectedFlowchartNodeId(null);
+                             push({ title: 'Waypoint added', type: 'info' });
+                             return;
+                           }
+
                           setSelectedFlowchartConnectionId(conn.id);
                           setSelectedFlowchartNodeId(null);
                         }}
@@ -2754,7 +2991,7 @@ const selectedTableRelationships = useMemo(() => {
                         )}
 
                         {/* Bend/waypoint handle (selected + unlocked) */}
-                        {isSelected && !effectiveIsLocked && (
+                        {isSelected && !effectiveIsLocked && !hasWaypoints && (
                           <circle
                             cx={handlePos.x}
                             cy={handlePos.y}
@@ -2787,6 +3024,46 @@ const selectedTableRelationships = useMemo(() => {
                               }
                             }}
                           />
+                        )}
+
+                        {/* Waypoints (selected + unlocked) */}
+                        {isSelected && !effectiveIsLocked && hasWaypoints && (
+                          <>
+                            {(conn.waypoints ?? []).map((wp, idx) => (
+                              <circle
+                                key={`${conn.id}-wp-${idx}`}
+                                cx={wp.x}
+                                cy={wp.y}
+                                r={6}
+                                fill="hsl(var(--background))"
+                                stroke="hsl(var(--primary))"
+                                strokeWidth={2}
+                                style={{ cursor: 'grab' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!e.altKey) return;
+                                  setFlowchartConnections((prev) =>
+                                    prev.map((c) => {
+                                      if (c.id !== conn.id) return c;
+                                      const wps = [...(c.waypoints ?? [])];
+                                      wps.splice(idx, 1);
+                                      return { ...c, waypoints: wps.length ? wps : undefined };
+                                    })
+                                  );
+                                  push({ title: 'Waypoint removed', type: 'info' });
+                                }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  const world = toWorld((e as any).clientX, (e as any).clientY);
+                                  setIsDraggingFlowchartWaypoint(true);
+                                  setDraggedFlowchartWaypoint({ connectionId: conn.id, index: idx });
+                                  setFlowchartWaypointDragStart(world);
+                                  setFlowchartWaypointDragStartPos({ x: wp.x, y: wp.y });
+                                }}
+                              />
+                            ))}
+                          </>
                         )}
                       </g>
                     );

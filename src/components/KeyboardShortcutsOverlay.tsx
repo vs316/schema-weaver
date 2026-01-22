@@ -32,6 +32,15 @@ const shortcuts = [
   { category: 'Diagram', items: [
     { keys: ['Ctrl', 'L'], description: 'Lock/unlock diagram' },
   ]},
+  { category: 'Flowchart', items: [
+    { keys: ['C'], description: 'Start/Cancel connection (from selected node)' },
+    { keys: ['F'], description: 'Fit to content' },
+    { keys: ['D'], description: 'Add Decision node' },
+    { keys: ['P'], description: 'Add Process node' },
+    { keys: ['S'], description: 'Add Start/End node' },
+    { keys: ['Shift', 'Click'], description: 'Add waypoint to selected connection' },
+    { keys: ['Alt', 'Click'], description: 'Remove waypoint (click waypoint dot)' },
+  ]},
 ];
 
 export function KeyboardShortcutsOverlay({ isOpen, onClose, isDarkMode }: KeyboardShortcutsOverlayProps) {
