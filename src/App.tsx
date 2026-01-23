@@ -68,6 +68,8 @@ import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay"
 import { Minimap } from "./components/Minimap";
 import { SequenceParticipantNode, SequenceMessageArrow, SequenceToolbox, SequenceEditor } from "./components/SequenceDiagram";
 import { FlowchartConnectionEditor } from "./components/FlowchartConnectionEditor";
+import { WaypointDragHUD } from "./components/WaypointDragHUD";
+import { useIsMobile, useIsSmallScreen } from "./hooks/useMediaQuery";
 import { useTheme } from "./components/ThemeProvider";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
@@ -242,6 +244,19 @@ function ERDBuilder({
 
   // Flowchart ghost preview while drawing a connection
   const [flowchartGhostTarget, setFlowchartGhostTarget] = useState<{ x: number; y: number } | null>(null);
+
+  // Waypoint HUD state for showing coordinates while dragging
+  const [waypointHUDState, setWaypointHUDState] = useState<{
+    visible: boolean;
+    screenPos: { x: number; y: number };
+    worldPos: { x: number; y: number };
+    isSnapped: boolean;
+    isAvoiding: boolean;
+  }>({ visible: false, screenPos: { x: 0, y: 0 }, worldPos: { x: 0, y: 0 }, isSnapped: false, isAvoiding: false });
+
+  // Responsive hooks
+  const isMobile = useIsMobile();
+  const isSmallScreen = useIsSmallScreen();
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -1232,7 +1247,19 @@ const selectedTableRelationships = useMemo(() => {
       return out;
     };
 
+    const originalPoint = { ...nextPoint };
     nextPoint = repelFromNodes(nextPoint);
+    const wasSnapped = isGridSnap && (Math.round(originalPoint.x / GRID_SIZE) * GRID_SIZE === originalPoint.x);
+    const wasAvoiding = originalPoint.x !== nextPoint.x || originalPoint.y !== nextPoint.y;
+
+    // Update HUD state
+    setWaypointHUDState({
+      visible: true,
+      screenPos: { x: e.clientX, y: e.clientY },
+      worldPos: nextPoint,
+      isSnapped: wasSnapped,
+      isAvoiding: wasAvoiding,
+    });
 
     setFlowchartConnections((prev) =>
       prev.map((c) => {
@@ -1246,6 +1273,11 @@ const selectedTableRelationships = useMemo(() => {
 
     lastActionWasDrag.current = true;
     return;
+  }
+
+  // Hide waypoint HUD when not dragging
+  if (waypointHUDState.visible && !isDraggingFlowchartWaypoint) {
+    setWaypointHUDState(prev => ({ ...prev, visible: false }));
   }
 
   // LASSO SELECTION - Third priority
@@ -2287,9 +2319,9 @@ const selectedTableRelationships = useMemo(() => {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* SIDEBAR TOOLBAR */}
+        {/* SIDEBAR TOOLBAR - hidden on mobile */}
         <div
-          className={`w-16 border-r flex flex-col items-center py-4 space-y-3 shadow-sm z-30 transition-colors duration-300 ${
+          className={`${isMobile ? 'hidden' : 'flex'} w-12 md:w-16 border-r flex-col items-center py-2 md:py-4 space-y-2 md:space-y-3 shadow-sm z-30 transition-colors duration-300 ${
             isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
           }`}
         >
@@ -2910,20 +2942,59 @@ const selectedTableRelationships = useMemo(() => {
                         onClick={(e) => {
                           e.stopPropagation();
 
-                           // Shift+click adds a waypoint at the click position
+                           // Shift+click: Smart waypoint insertion into nearest segment
                            if (e.shiftKey && !effectiveIsLocked) {
                              const world = toWorld(e.clientX, e.clientY);
                              setFlowchartConnections((prev) =>
                                prev.map((c) => {
                                  if (c.id !== conn.id) return c;
                                  const wps = [...(c.waypoints ?? [])];
-                                 wps.push({ x: world.x, y: world.y });
+                                 
+                                 // Find the nearest segment to insert into
+                                 const sourceN = flowchartNodes.find(n => n.id === c.sourceNodeId);
+                                 const targetN = flowchartNodes.find(n => n.id === c.targetNodeId);
+                                 if (!sourceN || !targetN) {
+                                   wps.push({ x: world.x, y: world.y });
+                                   return { ...c, waypoints: wps, lineType: 'straight' };
+                                 }
+
+                                 // Build list of points: source -> waypoints -> target
+                                 const points = [
+                                   { x: sourceN.x + 60, y: sourceN.y + 25 },
+                                   ...wps,
+                                   { x: targetN.x + 60, y: targetN.y + 25 },
+                                 ];
+
+                                 // Find nearest segment
+                                 let minDist = Infinity;
+                                 let insertIdx = wps.length; // default: append
+
+                                 for (let i = 0; i < points.length - 1; i++) {
+                                   const p1 = points[i];
+                                   const p2 = points[i + 1];
+                                   // Distance from point to line segment
+                                   const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                                   if (segLen === 0) continue;
+                                   const t = Math.max(0, Math.min(1, ((world.x - p1.x) * (p2.x - p1.x) + (world.y - p1.y) * (p2.y - p1.y)) / (segLen * segLen)));
+                                   const projX = p1.x + t * (p2.x - p1.x);
+                                   const projY = p1.y + t * (p2.y - p1.y);
+                                   const dist = Math.hypot(world.x - projX, world.y - projY);
+                                   if (dist < minDist) {
+                                     minDist = dist;
+                                     insertIdx = i; // Insert after waypoint index i-1 (so at position i in wps array)
+                                   }
+                                 }
+
+                                 // Insert at the correct position (adjusting for source point at index 0)
+                                 const wpInsertIdx = Math.max(0, insertIdx);
+                                 wps.splice(wpInsertIdx, 0, { x: world.x, y: world.y });
+                                 
                                  return { ...c, waypoints: wps, lineType: 'straight' };
                                })
                              );
                              setSelectedFlowchartConnectionId(conn.id);
                              setSelectedFlowchartNodeId(null);
-                             push({ title: 'Waypoint added', type: 'info' });
+                             push({ title: 'Waypoint inserted', type: 'info' });
                              return;
                            }
 
@@ -3315,8 +3386,18 @@ const selectedTableRelationships = useMemo(() => {
               );
             })()}
 
+          {/* Waypoint Drag HUD */}
+          <WaypointDragHUD
+            visible={waypointHUDState.visible}
+            position={waypointHUDState.screenPos}
+            worldPosition={waypointHUDState.worldPos}
+            isSnapped={waypointHUDState.isSnapped}
+            isAvoiding={waypointHUDState.isAvoiding}
+            viewport={viewport}
+          />
+
           <div
-            className={`absolute bottom-6 left-6 px-4 py-2 backdrop-blur-xl border rounded-full text-[10px] font-bold uppercase tracking-widest pointer-events-none transition-all duration-200 ${
+            className={`absolute bottom-6 left-6 px-4 py-2 backdrop-blur-xl border rounded-full text-[10px] font-bold uppercase tracking-widest pointer-events-none transition-all duration-200 ${isSmallScreen ? 'hidden' : ''} ${
               isDarkMode ? "bg-slate-900/60 border-slate-700 text-slate-300 shadow-lg shadow-slate-950/40" : "bg-white/70 border-slate-200 text-slate-700 shadow-md shadow-slate-400/10"
             }`}
           >
@@ -4206,6 +4287,7 @@ const selectedTableRelationships = useMemo(() => {
                   <FlowchartConnectionEditor
                     connection={selectedConn}
                     isLocked={effectiveIsLocked}
+                    nodes={flowchartNodes}
                     onUpdate={(updates) => {
                       setFlowchartConnections(prev => prev.map(c => 
                         c.id === selectedFlowchartConnectionId ? { ...c, ...updates } : c
