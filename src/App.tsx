@@ -71,6 +71,9 @@ import { FlowchartConnectionEditor } from "./components/FlowchartConnectionEdito
 import { WaypointDragHUD } from "./components/WaypointDragHUD";
 import { useIsMobile, useIsSmallScreen } from "./hooks/useMediaQuery";
 import { useTheme } from "./components/ThemeProvider";
+import { QuickActionsToolbar } from "./components/QuickActionsToolbar";
+import { MobileBottomNav } from "./components/MobileBottomNav";
+import { useTouchGestures } from "./hooks/useTouchGestures";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
 
@@ -257,8 +260,38 @@ function ERDBuilder({
   // Responsive hooks
   const isMobile = useIsMobile();
   const isSmallScreen = useIsSmallScreen();
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  
+  // Touch gesture support for pinch-to-zoom and two-finger pan
+  useTouchGestures(canvasRef, {
+    onPinchZoom: useCallback((scale: number, centerX: number, centerY: number) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      
+      const newZoom = clamp(viewport.zoom * scale, 0.2, 3);
+      const zoomDelta = newZoom - viewport.zoom;
+      
+      // Adjust position to zoom towards the pinch center
+      const x = centerX - rect.left;
+      const y = centerY - rect.top;
+      
+      setViewport(prev => ({
+        x: prev.x - x * (zoomDelta / prev.zoom),
+        y: prev.y - y * (zoomDelta / prev.zoom),
+        zoom: newZoom,
+      }));
+    }, [viewport.zoom]),
+    onPan: useCallback((deltaX: number, deltaY: number) => {
+      setViewport(prev => ({
+        ...prev,
+        x: prev.x + deltaX,
+        y: prev.y + deltaY,
+      }));
+    }, []),
+    enabled: isMobile || isSmallScreen,
+  });
 
   const normalizeViewport = useCallback((raw: any) => {
     const x = Number(raw?.x);
@@ -288,7 +321,7 @@ function ERDBuilder({
   };
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [connectTableSearch, setConnectTableSearch] = useState<string>("");
-  const [showCommandTips, setShowCommandTips] = useState(false);
+  // showCommandTips state removed - using keyboard shortcuts overlay instead
 
   // --- PRESENCE (Real-time collaboration) ---
   const { users: presenceUsers, isConnected: presenceConnected, updateCursor } = usePresence(
@@ -3396,55 +3429,127 @@ const selectedTableRelationships = useMemo(() => {
             viewport={viewport}
           />
 
-          <div
-            className={`absolute bottom-6 left-6 px-4 py-2 backdrop-blur-xl border rounded-full text-[10px] font-bold uppercase tracking-widest pointer-events-none transition-all duration-200 ${isSmallScreen ? 'hidden' : ''} ${
-              isDarkMode ? "bg-slate-900/60 border-slate-700 text-slate-300 shadow-lg shadow-slate-950/40" : "bg-white/70 border-slate-200 text-slate-700 shadow-md shadow-slate-400/10"
-            }`}
-          >
-            Zoom: {Math.round(viewport.zoom * 100)}%
-          </div>
-
-          <button
-            onClick={() => setShowCommandTips(!showCommandTips)}
-            className={`absolute bottom-6 right-6 px-4 py-2 backdrop-blur-xl border rounded-full text-[10px] font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer hover:scale-105 active:scale-95 ${
-              isDarkMode
-                ? "bg-slate-900/60 border-slate-700 text-slate-300 shadow-lg shadow-slate-950/40 hover:bg-slate-800/60 hover:border-slate-600"
-                : "bg-white/70 border-slate-200 text-slate-700 shadow-md shadow-slate-400/10 hover:bg-white/80 hover:border-slate-300"
-            }`}
-          >
-            {showCommandTips ? (
-              <div className="flex flex-col gap-2">
-                <div className="text-[9px]">Keyboard & Mouse</div>
-                <div className="space-y-1 text-[9px] font-normal opacity-90">
-                  <div>Shift+Click: multi-select</div>
-                  <div>Drag empty: lasso select</div>
-                  <div>Right-drag: pan canvas</div>
-                  <div>Click edge: bend line</div>
-                  <div>Ctrl/Cmd+Z: undo, Ctrl+Shift+Z: redo</div>
-                  {/* <div>Ctrl/Cmd+S: export JSON, Ctrl/Cmd+P: export PNG</div> */}
-                  <div>Ctrl/Cmd+D: duplicate table</div>
-                  <div>Ctrl/Cmd+G: toggle grid snapping</div>
-                  <div>Delete: remove selection</div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1">
-                <span>?</span>
-                <span>Commands</span>
-              </div>
-            )}
-          </button>
-
-          {/* Exporting indicator */}
-          {/* {isExportingPNG && (
+          {/* Zoom indicator - hide on mobile */}
+          {!isMobile && (
             <div
-              className={`absolute bottom-6 left-1/2 -translate-x-1/2 px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                isDarkMode ? "bg-slate-900/80 border border-slate-700" : "bg-white/80 border border-slate-300"
+              className={`absolute bottom-6 left-6 px-4 py-2 backdrop-blur-xl border rounded-full text-[10px] font-bold uppercase tracking-widest pointer-events-none transition-all duration-200 ${isSmallScreen ? 'hidden' : ''} ${
+                isDarkMode ? "bg-slate-900/60 border-slate-700 text-slate-300 shadow-lg shadow-slate-950/40" : "bg-white/70 border-slate-200 text-slate-700 shadow-md shadow-slate-400/10"
               }`}
             >
-              Exporting PNG...
+              Zoom: {Math.round(viewport.zoom * 100)}%
             </div>
-          )} */}
+          )}
+
+          {/* Refactored Commands Pill - hide on mobile/small screens */}
+          {!isSmallScreen && (
+            <button
+              onClick={() => setShowKeyboardShortcuts(true)}
+              className={`absolute bottom-6 right-6 flex items-center gap-2 px-4 py-2.5 rounded-2xl border shadow-xl backdrop-blur-md transition-all duration-300 cursor-pointer hover:scale-105 active:scale-95 ${
+                isDarkMode
+                  ? "bg-slate-900/80 border-slate-700/50 text-slate-300 hover:bg-slate-800/80 hover:border-primary/50"
+                  : "bg-white/90 border-slate-200 text-slate-600 hover:bg-white hover:border-primary/50"
+              }`}
+            >
+              <div 
+                className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
+                style={{ 
+                  background: 'hsl(var(--primary) / 0.15)', 
+                  color: 'hsl(var(--primary))' 
+                }}
+              >
+                ?
+              </div>
+              <span className="text-[11px] font-semibold">Shortcuts</span>
+              <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'}`}>
+                ⌘/
+              </div>
+            </button>
+          )}
+
+          {/* Quick Actions Toolbar - always visible except on mobile */}
+          {!isMobile && (
+            <QuickActionsToolbar
+              isDarkMode={isDarkMode}
+              canUndo={historyIndex > 0}
+              canRedo={historyIndex < history.length - 1}
+              onUndo={undo}
+              onRedo={redo}
+              onFitToContent={fitToContent}
+              onZoomIn={zoomIn}
+              onZoomOut={zoomOut}
+              onResetViewport={resetViewport}
+            />
+          )}
+
+          {/* Mobile Bottom Navigation */}
+          {isMobile && (
+            <MobileBottomNav
+              isDarkMode={isDarkMode}
+              diagramType={diagramType}
+              canUndo={historyIndex > 0}
+              canRedo={historyIndex < history.length - 1}
+              isLocked={effectiveIsLocked}
+              onUndo={undo}
+              onRedo={redo}
+              onFitToContent={fitToContent}
+              onAddElement={() => {
+                if (diagramType === 'erd') {
+                  addTable();
+                } else if (diagramType === 'uml-class') {
+                  const center = getCanvasCenterWorld();
+                  const newClass: UMLClass = {
+                    id: generateId(),
+                    name: 'NewClass',
+                    stereotype: undefined,
+                    x: center.x,
+                    y: center.y,
+                    attributes: [],
+                    methods: [],
+                  };
+                  setUmlClasses(prev => [...prev, newClass]);
+                  setSelectedUmlClassId(newClass.id);
+                  push({ title: "Class added", type: "success" });
+                } else if (diagramType === 'flowchart') {
+                  const center = getCanvasCenterWorld();
+                  const newNode: FlowchartNodeType = {
+                    id: generateId(),
+                    type: 'process',
+                    label: 'Process',
+                    x: center.x,
+                    y: center.y,
+                  };
+                  setFlowchartNodes(prev => [...prev, newNode]);
+                  setSelectedFlowchartNodeId(newNode.id);
+                  push({ title: "Node added", type: "success" });
+                } else if (diagramType === 'sequence') {
+                  const newParticipant: SequenceParticipant = {
+                    id: generateId(),
+                    name: 'Actor',
+                    type: 'actor',
+                    x: 100 + sequenceParticipants.length * 150,
+                  };
+                  setSequenceParticipants(prev => [...prev, newParticipant]);
+                  setSelectedParticipantId(newParticipant.id);
+                  push({ title: "Participant added", type: "success" });
+                }
+              }}
+              onStartConnection={() => {
+                if (diagramType === 'uml-class' && selectedUmlClassId) {
+                  setIsDrawingUmlRelation(true);
+                  setUmlRelationSource(selectedUmlClassId);
+                  push({ title: "Click target class", type: "info" });
+                } else if (diagramType === 'flowchart' && selectedFlowchartNodeId) {
+                  setIsDrawingConnection(true);
+                  setConnectionSource(selectedFlowchartNodeId);
+                  push({ title: "Click target node", type: "info" });
+                } else {
+                  push({ title: `Select a ${diagramType === 'erd' ? 'table' : diagramType === 'uml-class' ? 'class' : 'node'} first`, type: "info" });
+                }
+              }}
+              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+              onShowMenu={() => setShowMobileMenu(!showMobileMenu)}
+            />
+          )}
         </div>
 
         {/* EDITOR SIDEBAR - Resizable with popup modal option */}

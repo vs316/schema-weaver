@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   Circle, 
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { FlowchartNodeType } from '../types/uml';
 import { FLOWCHART_NODE_LABELS } from '../types/uml';
+import { DraggableToolbar } from './DraggableToolbar';
 
 interface FlowchartToolboxProps {
   onAddNode: (type: FlowchartNodeType) => void;
@@ -63,27 +63,17 @@ export function FlowchartToolbox({
   if (isLocked) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30"
+    <DraggableToolbar
+      isDarkMode={isDarkMode}
+      label="Add Node"
+      className="bottom-6 left-1/2 -translate-x-1/2"
     >
-      <div
-        className="flex items-center gap-2 px-3 py-2 rounded-xl border shadow-lg backdrop-blur-sm"
-        style={{
-          background: isDarkMode ? 'hsl(222 47% 11% / 0.9)' : 'hsl(0 0% 100% / 0.9)',
-          borderColor: 'hsl(var(--border))',
-        }}
-      >
-        <span className="text-[10px] font-medium px-2" style={{ color: 'hsl(var(--muted-foreground))' }}>
-          Add Node:
-        </span>
-        
+      <div className="flex items-center gap-1 flex-wrap max-w-[500px]">
         {(Object.keys(FLOWCHART_NODE_LABELS) as FlowchartNodeType[]).map((type) => (
           <motion.button
             key={type}
             onClick={() => onAddNode(type)}
-            className="flex items-center justify-center w-9 h-9 rounded-lg transition-all hover:scale-110"
+            className="flex items-center justify-center w-9 h-9 rounded-xl transition-all hover:scale-110"
             style={{
               background: `${NODE_COLORS[type]}20`,
               color: NODE_COLORS[type],
@@ -96,7 +86,7 @@ export function FlowchartToolbox({
           </motion.button>
         ))}
       </div>
-    </motion.div>
+    </DraggableToolbar>
   );
 }
 
