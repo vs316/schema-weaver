@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { SequenceParticipant, SequenceMessage } from '../types/uml';
 import { User, Box, Database, Shield, Server } from 'lucide-react';
+import { DraggableToolbar } from './DraggableToolbar';
 
 // Participant component
 interface ParticipantProps {
@@ -395,7 +396,7 @@ interface SequenceToolboxProps {
 
 export function SequenceToolbox({
   onAddParticipant,
-  isDarkMode: _isDarkMode,
+  isDarkMode,
   isLocked,
 }: SequenceToolboxProps) {
   if (isLocked) return null;
@@ -409,40 +410,31 @@ export function SequenceToolbox({
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30"
+    <DraggableToolbar
+      isDarkMode={isDarkMode}
+      label="Add"
+      className="bottom-6 left-1/2 -translate-x-1/2"
     >
-      <div
-        className="flex items-center gap-2 px-3 py-2 rounded-xl border shadow-lg backdrop-blur-sm"
-        style={{
-          background: _isDarkMode ? 'hsl(222 47% 11% / 0.9)' : 'hsl(0 0% 100% / 0.9)',
-          borderColor: 'hsl(var(--border))',
-        }}
-      >
-        <span className="text-[10px] font-medium px-2" style={{ color: 'hsl(var(--muted-foreground))' }}>
-          Add:
-        </span>
-        
+      <div className="flex items-center gap-1.5">
         {participantTypes.map(({ type, label }) => (
           <motion.button
             key={type}
             onClick={() => onAddParticipant(type)}
-            className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all hover:scale-105"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl transition-all hover:scale-105"
             style={{
-              background: 'hsl(var(--primary) / 0.1)',
+              background: 'hsl(var(--primary) / 0.12)',
               color: 'hsl(var(--primary))',
+              border: '1px solid hsl(var(--primary) / 0.2)',
             }}
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.95 }}
             title={label}
           >
             {PARTICIPANT_ICONS[type]}
-            <span className="text-[10px] font-medium">{label}</span>
+            <span className="text-[10px] font-semibold">{label}</span>
           </motion.button>
         ))}
       </div>
-    </motion.div>
+    </DraggableToolbar>
   );
 }
