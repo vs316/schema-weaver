@@ -8,6 +8,8 @@ import {
   User,
   Settings,
   Loader2,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
@@ -167,7 +169,89 @@ export function TeamWorkspaceSwitcher({
   }
 
   if (teams.length === 0) {
-    return null;
+    return (
+      <div className="relative">
+        <motion.button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 border"
+          style={{
+            background: isDarkMode ? 'hsl(222 47% 8%)' : 'hsl(0 0% 100%)',
+            borderColor: isOpen
+              ? 'hsl(239 84% 67% / 0.5)'
+              : isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
+          }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <Users size={16} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+          <span className="text-sm" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
+            No Team
+          </span>
+          <ChevronDown size={14} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+        </motion.button>
+
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-40"
+                onClick={() => setIsOpen(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                className="absolute top-full left-0 mt-2 w-64 rounded-lg border shadow-xl z-50 overflow-hidden"
+                style={{
+                  background: isDarkMode ? 'hsl(222 47% 6%)' : 'hsl(0 0% 100%)',
+                  borderColor: isDarkMode ? 'hsl(217 33% 17%)' : 'hsl(220 13% 91%)',
+                }}
+              >
+                <div className="p-3">
+                  <p className="text-xs mb-3" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
+                    You're not part of any team yet. Join one or manage your teams.
+                  </p>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => {
+                        setIsOpen(false);
+                        onOpenSettings();
+                      }}
+                      className={`w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors ${
+                        isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                      }`}
+                    >
+                      <UserPlus size={14} style={{ color: 'hsl(239 84% 67%)' }} />
+                      <span className="text-sm" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
+                        Join a Team
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsOpen(false);
+                        onOpenSettings();
+                      }}
+                      className={`w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors ${
+                        isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                      }`}
+                    >
+                      <Settings size={14} style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }} />
+                      <span className="text-sm" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
+                        Manage Teams
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
   }
 
   return (
