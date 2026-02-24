@@ -53,6 +53,24 @@ export function TeamWorkspaceSwitcher({
     fetchTeams();
   }, [currentTeamId]);
 
+  // Real-time subscription for team_members changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('team-members-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'team_members' },
+        () => {
+          fetchTeams();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const fetchTeams = async () => {
     setLoading(true);
     
