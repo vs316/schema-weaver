@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { Appearance } from "../design/appearance";
 import {
-  Appearance,
   DEFAULT_APPEARANCE,
   applyAppearance,
   readStoredAppearance,
