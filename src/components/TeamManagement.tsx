@@ -228,7 +228,8 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
   };
 
   const updateTeamName = async (tid: string) => {
-    if (!newName.trim()) return;
+    const trimmedName = newName.trim();
+    if (!trimmedName || trimmedName.length > 100) return;
     setSaving(true);
     const { error } = await supabase
       .from('teams')
@@ -296,8 +297,13 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
   };
 
   const joinTeam = async () => {
-    if (!inviteCode.trim()) {
+    const code = inviteCode.trim().toLowerCase();
+    if (!code) {
       setJoinError('Please enter an invite code');
+      return;
+    }
+    if (!/^[a-f0-9]{8}$/.test(code)) {
+      setJoinError('Invite code must be 8 characters (a-f, 0-9)');
       return;
     }
 
@@ -305,7 +311,7 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
     setJoinError(null);
 
     const { data, error } = await supabase.rpc('join_team_by_invite', {
-      p_invite_code: inviteCode.trim().toLowerCase(),
+      p_invite_code: code,
     });
 
     if (error) {
@@ -328,6 +334,10 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
 
   const createNewTeam = async () => {
     if (!newTeamName.trim() || !currentUserEmail) return;
+    if (newTeamName.trim().length > 100) {
+      setCreateError('Team name must be 100 characters or less');
+      return;
+    }
     
     setCreatingTeam(true);
     setCreateError(null);
