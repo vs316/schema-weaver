@@ -69,11 +69,10 @@ export function usePresence(diagramId: string | null, userId?: string, userName?
         activeUsers.forEach(u => usersMapRef.current.set(u.id, u));
         setUsers([...activeUsers]);
       })
-      .on('presence', { event: 'join' }, ({ newPresences }) => {
-        console.log('[Presence] User joined:', newPresences);
+      .on('presence', { event: 'join' }, () => {
+        // Presence join handled by sync event; no logging of user data.
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        console.log('[Presence] User left:', leftPresences);
         for (const p of leftPresences as any[]) {
           if (p.id) {
             usersMapRef.current.delete(p.id);

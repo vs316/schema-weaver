@@ -14,8 +14,13 @@ export function JoinTeamModal({ onClose, onSuccess }: JoinTeamModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   const handleJoin = async () => {
-    if (!inviteCode.trim()) {
+    const code = inviteCode.trim().toLowerCase();
+    if (!code) {
       setError('Please enter an invite code');
+      return;
+    }
+    if (!/^[a-f0-9]{8}$/.test(code)) {
+      setError('Invite code must be 8 characters (a-f, 0-9)');
       return;
     }
 
@@ -24,7 +29,7 @@ export function JoinTeamModal({ onClose, onSuccess }: JoinTeamModalProps) {
 
     try {
       const { data, error: rpcError } = await supabase.rpc('join_team_by_invite', {
-        p_invite_code: inviteCode.trim().toLowerCase(),
+        p_invite_code: code,
       });
 
       if (rpcError) {

@@ -1,4 +1,5 @@
 import React from "react";
+import { logger } from '../utils/logger';
 
 type Props = {
   children: React.ReactNode;
@@ -17,7 +18,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: unknown) {
     // Intentionally minimal: error is displayed in fallback UI.
     // eslint-disable-next-line no-console
-    console.error("Startup error boundary caught:", error);
+    logger.error("Startup error boundary caught", error);
   }
 
   render() {
