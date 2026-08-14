@@ -5246,7 +5246,7 @@ export default function App() {
           }
         }}
         onLogout={handleLogout}
-        onTeamSwitch={(newTeamId) => {
+        onTeamSwitch={() => {
           // Team switch handled by refresh in DiagramSelector
           logger.log('Switching to team');
         }}
