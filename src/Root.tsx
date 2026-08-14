@@ -12,6 +12,7 @@ const AuthPage = React.lazy(async () => {
   return { default: mod.AuthPage };
 });
 const AdminPage = React.lazy(() => import("./pages/Admin"));
+const SettingsPage = React.lazy(() => import("./pages/Settings"));
 
 type StartupCfg = {
   url: string;
