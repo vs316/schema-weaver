@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Table, Relation } from "../types";
+import { logger } from '../utils/logger';
 
 const STORAGE_KEY = "erd-data";
 
@@ -36,7 +37,7 @@ export function useAutoSave(
         };
       }
     } catch (e) {
-      console.error("Failed to load saved data:", e);
+      logger.error("Failed to load saved data", e);
     }
     return null;
   };

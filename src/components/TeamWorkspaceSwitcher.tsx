@@ -14,6 +14,7 @@ import {
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
 import { useTheme } from './ThemeProvider';
+import { logger } from '../utils/logger';
 
 interface TeamMembership {
   team_id: string;
@@ -87,7 +88,7 @@ export function TeamWorkspaceSwitcher({
       .eq('user_id', user.id);
 
     if (membershipError) {
-      console.error('Failed to fetch memberships:', membershipError);
+      logger.error('Failed to fetch memberships', membershipError);
       setLoading(false);
       return;
     }
@@ -106,7 +107,7 @@ export function TeamWorkspaceSwitcher({
       .in('id', teamIds);
 
     if (teamsError) {
-      console.error('Failed to fetch teams:', teamsError);
+      logger.error('Failed to fetch teams', teamsError);
       setLoading(false);
       return;
     }

@@ -3,6 +3,7 @@ import { supabase } from '../integrations/supabase/safeClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Json } from '../integrations/supabase/types';
 import type { DiagramType } from '../types/uml';
+import { logger } from '../utils/logger';
 
 export interface ERDDiagram {
   id: string;
@@ -54,7 +55,7 @@ export function useCloudSync(userId?: string) {
       .order('updated_at', { ascending: false });
 
     if (error) {
-      console.error('Failed to fetch diagrams:', error);
+      logger.error('Failed to fetch diagrams', error);
       setError('Failed to load diagrams.');
       return;
     }
@@ -132,7 +133,7 @@ export function useCloudSync(userId?: string) {
       .maybeSingle();
 
     if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Profile fetch error:', profileError);
+      logger.error('Profile fetch error', profileError);
       setError('Failed to load user profile.');
       setLoading(false);
       return;
@@ -147,7 +148,7 @@ export function useCloudSync(userId?: string) {
       });
 
       if (insertError) {
-        console.error('Profile creation failed:', insertError);
+        logger.error('Profile creation failed', insertError);
         setError('Failed to initialize your account.');
         setLoading(false);
         return;

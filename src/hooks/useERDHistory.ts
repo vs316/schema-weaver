@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Table, Relation } from "../types";
+import { logger } from '../utils/logger';
 
 type Viewport = { x: number; y: number; zoom: number };
 type Snapshot = { tables: Table[]; relations: Relation[]; viewport: Viewport };
@@ -67,7 +68,7 @@ export function useHistory() {
       setHistoryIndex(targetIdx);
       return true;
     } catch (err) {
-      console.error("Undo failed", err);
+      logger.error("Undo failed", err);
       return false;
     } finally {
       suppressHistory.current = false;
@@ -100,7 +101,7 @@ export function useHistory() {
       setHistoryIndex(nextIdx);
       return true;
     } catch (err) {
-      console.error("Redo failed", err);
+      logger.error("Redo failed", err);
       return false;
     } finally {
       suppressHistory.current = false;

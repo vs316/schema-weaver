@@ -76,6 +76,7 @@ import { MobileBottomNav } from "./components/MobileBottomNav";
 import { useTouchGestures } from "./hooks/useTouchGestures";
 import type { Json } from "./integrations/supabase/types";
 import { supabase } from "./utils/supabase";
+import { logger } from './utils/logger';
 
 /** --- TYPES --- **/
 type TableComment = {
@@ -511,7 +512,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       setHistoryIndex(targetIdx);
       push({ title: "Undo", type: "info" });
     } catch (err) {
-      console.error("Undo failed", err);
+      logger.error("Undo failed", err);
       push({ title: "Undo failed", type: "error" });
     } finally {
       suppressHistory.current = false;
@@ -549,7 +550,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
       setHistoryIndex(nextIdx);
       push({ title: "Redo", type: "info" });
     } catch (err) {
-      console.error("Redo failed", err);
+      logger.error("Redo failed", err);
       push({ title: "Redo failed", type: "error" });
     } finally {
       suppressHistory.current = false;
@@ -620,7 +621,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
         
         setLastSaved("Loaded from cloud");
       } catch (e) {
-        console.error("Failed to load data from cloud", e);
+        logger.error("Failed to load data from cloud", e);
         // Fallback to localStorage
         const saved = localStorage.getItem("erd-data");
         if (saved) {
@@ -631,7 +632,7 @@ const effectiveIsLocked = isLocked || userRole.isReaderOrViewer;
             setTheme((dark ?? true) ? "dark" : "light");
             setLastSaved(time || "Never");
           } catch (e) {
-            console.error("Failed to load data from localStorage", e);
+            logger.error("Failed to load data from localStorage", e);
           }
         }
       }
@@ -1831,7 +1832,7 @@ const selectedTableRelationships = useMemo(() => {
       
       push({ title: "PNG exported", description: `${Math.round(diagramWidth)}x${Math.round(diagramHeight)}px`, type: "success" });
     } catch (err) {
-      console.error("PNG export error:", err);
+      logger.error("PNG export error", err);
       push({ title: "PNG export failed", description: "Could not render diagram", type: "error" });
     }
   }, [isDarkMode, tables, relations, push]);
@@ -5247,7 +5248,7 @@ export default function App() {
         onLogout={handleLogout}
         onTeamSwitch={(newTeamId) => {
           // Team switch handled by refresh in DiagramSelector
-          console.log('Switching to team:', newTeamId);
+          logger.log('Switching to team');
         }}
       />
     );

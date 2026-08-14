@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/safeClient';
 import type { TeamRole } from '../types/index';
+import { logger } from '../utils/logger';
 
 interface TeamMember {
   id: string;
@@ -355,7 +356,7 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
         .single();
 
       if (teamError || !newTeam) {
-        console.error('Failed to create team:', teamError);
+        logger.error('Failed to create team', teamError);
         setCreateError(teamError?.message || 'Failed to create team');
         setCreatingTeam(false);
         return;
@@ -369,7 +370,7 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
       });
 
       if (memberError) {
-        console.error('Failed to add as owner:', memberError);
+        logger.error('Failed to add as owner', memberError);
         setCreateError('Team created but failed to add you as owner');
         setCreatingTeam(false);
         return;
@@ -385,7 +386,7 @@ export function TeamManagement({ teamId: _teamId, onTeamJoined, onClose }: TeamM
       setCreatingTeam(false);
       window.location.reload();
     } catch (err) {
-      console.error('Team creation error:', err);
+      logger.error('Team creation error', err);
       setCreateError('An unexpected error occurred');
       setCreatingTeam(false);
     }
