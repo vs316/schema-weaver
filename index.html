@@ -3,30 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ERD Studio</title>
+    <title>Diagram Studio — Collaborative Diagrams & Data Models</title>
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
-    <meta name="description" content="ERD Studio - Professional Entity Relationship Diagram design tool for database schema modeling" />
+    <meta
+      name="description"
+      content="Design ERDs, UML, flowcharts, sequence and Mermaid diagrams with your team in real time. A fast, keyboard-first diagramming workspace."
+    />
+    <meta property="og:title" content="Diagram Studio — Collaborative Diagrams & Data Models" />
+    <meta
+      property="og:description"
+      content="Design ERDs, UML, flowcharts, sequence and Mermaid diagrams with your team in real time."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
     <script>
-      // Apply theme immediately to prevent flash
-      (function() {
-        var theme = localStorage.getItem('theme');
-        if (!theme) {
-          theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-        }
-        if (theme === 'light') {
-          document.documentElement.classList.add('light');
-          document.documentElement.style.colorScheme = 'light';
-        } else {
-          document.documentElement.classList.add('dark');
-          document.documentElement.style.colorScheme = 'dark';
+      // Apply appearance immediately to prevent flash of unstyled UI
+      (function () {
+        try {
+          var raw = localStorage.getItem("ds-appearance");
+          var a = raw ? JSON.parse(raw) : {};
+          var theme = a.theme || localStorage.getItem("erd-theme") || localStorage.getItem("theme") || "dark";
+          if (theme === "system") {
+            theme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          }
+          var root = document.documentElement;
+          root.classList.remove("light", "dark", "contrast");
+          root.classList.add(theme);
+          root.style.colorScheme = theme === "light" ? "light" : "dark";
+          root.classList.add("density-" + (a.density || "cozy"));
+          root.classList.add("scale-" + (a.scale || "md"));
+          root.classList.add("font-app-" + (a.font || "sans"));
+          if (a.reducedMotion) root.classList.add("reduce-motion");
+        } catch (e) {
+          document.documentElement.classList.add("dark", "density-cozy", "scale-md", "font-app-sans");
         }
       })();
     </script>
   </head>
   <body>
     <div id="root"></div>
-    
+
     <!-- Load React app -->
     <script type="module" src="/src/main.tsx"></script>
   </body>

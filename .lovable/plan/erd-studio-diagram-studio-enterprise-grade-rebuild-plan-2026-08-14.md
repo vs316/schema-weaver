@@ -9,6 +9,7 @@ Strengths already in place: multi-type diagram storage (ERD / UML class / flowch
 Gaps that keep it out of the Figma/Notion/Canva category:
 
 **Product/functional**
+
 - No Mermaid at all (no import, no live code↔canvas, no export).
 - Only 4 hard-coded diagram types; no generic shape/sketch layer, no freehand, no text/sticky/frame primitives, no images, no connectors between arbitrary shapes.
 - No version history / named versions / restore / diff — only a local in-memory undo stack that dies on refresh.
@@ -21,9 +22,13 @@ Gaps that keep it out of the Figma/Notion/Canva category:
 - No keyboard-first command palette (⌘K), no quick-insert, no context menus.
 - No presentation mode, no minimap parity across all types, no fullscreen focus mode.
 - No onboarding, empty states are dead ends, no in-app help.
-- No personal settings at all (theme, density, font, shortcuts, defaults).
+- No personal settings at all (theme, density, font, shortcuts, defaults).  
+  
+We need this as well to turn it into a true enteprise-org usable platform: (like Clickup/Notion):  
+- Do full CRUD , and view, write, create, update, in proper formatting and styling all kinds of documents-- like pdfs, docs, docx, slides(pptx), excel sheets ,etc.. (e2e, premium , branded, styled, exhaustive)
 
 **Engineering**
+
 - Monolithic `App.tsx`-driven state; per-type components duplicate canvas logic instead of one shared engine.
 - Realtime is last-write-wins on a whole JSONB blob — two editors overwrite each other; no conflict resolution, no operation log.
 - Autosave writes the entire diagram document every 2s (cost + contention at scale); no dirty-field diffing, no offline queue.
@@ -32,6 +37,7 @@ Gaps that keep it out of the Figma/Notion/Canva category:
 - Styling is a mix of `App.css` hex literals, Tailwind, and inline styles — no token layer, so theming/density/fonts are impossible today.
 
 **Security/ops**
+
 - Diagram RLS uses `get_user_team_id` (single team) while the app has multi-team membership → access rules and UI disagree.
 - No audit trail on diagram changes, no soft delete/trash, no rate limits on writes.
 - Email/domain not configured (password reset mail doesn't deliver).
@@ -41,6 +47,7 @@ Gaps that keep it out of the Figma/Notion/Canva category:
 Locked palette — **Charcoal & Ember**: `#1a1a1a` base, `#2d2d2d` surface, `#4a4a4a` line, `#e85d3a` accent. Precision-instrument feel: near-black canvas, warm ember for anything active, selected, live, or destructive-adjacent. No purple/indigo gradients, no glassmorphism clichés.
 
 Per your answer, typography and density are **user-configurable, not fixed**:
+
 - Personal Settings → Appearance with: theme (dark / light / system / high-contrast), font family (sans, serif, mono, and a "system" option), UI scale (S/M/L), and density (**compact / cozy / comfortable**) driving all paddings, row heights and control sizes.
 - All of it is CSS-variable driven, persisted per user in the backend and mirrored to localStorage so it applies before first paint.
 
@@ -57,6 +64,7 @@ Token layer in CSS variables (color, spacing, radius, elevation, motion, type sc
 One canvas core (viewport, selection, transform, snapping, alignment guides, grouping, marquee, copy/paste, nudge, z-order, context menus) with diagram types as plugins over a shared document model. Adds a generic shape/sketch layer: rectangles, ellipses, sticky notes, text, images, freehand ink, frames, and arbitrary connectors — so "any diagram" is possible, not just the four types. Canvas rendering moves to virtualised/culled rendering for large graphs.
 
 **Phase 3 — Mermaid end to end**
+
 - Split view: live Mermaid code editor (CodeMirror, syntax highlight, error markers) beside the rendered diagram, with debounce and error recovery.
 - Import/paste Mermaid → parsed into the native document model, editable on canvas.
 - Native diagram → Mermaid code generation, kept in sync bidirectionally (code edits update canvas, canvas edits regenerate code).
