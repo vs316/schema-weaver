@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Command,
+  Waypoints,
 } from "lucide-react";
 import { cn } from "../../ui/cn";
 import { Tooltip } from "../../ui/Tooltip";
@@ -63,6 +64,7 @@ export function AppShell({
   const items: RailItem[] = [
     { id: "home", label: "Home", icon: <Home size={18} />, to: "/diagrams" },
     { id: "search", label: "Search", icon: <Search size={18} />, onClick: () => (onSearch ? onSearch() : setPaletteOpen(true)), shortcut: "⌘K" },
+    { id: "mermaid", label: "Mermaid studio", icon: <Waypoints size={18} />, to: "/mermaid" },
     { id: "templates", label: "Templates", icon: <LayoutTemplate size={18} />, to: "/templates" },
     { id: "team", label: "Team", icon: <Users size={18} />, to: "/team" },
     { id: "trash", label: "Trash", icon: <Trash2 size={18} />, to: "/trash" },
