@@ -62,7 +62,7 @@ import { exportUMLDiagram as _exportUMLDiagram, exportFlowchartDiagram as _expor
 import html2canvas from "html2canvas";
 import { useCloudSync, type ERDDiagram } from "./hooks/useCloudSync";
 import { usePresence } from "./hooks/usePresence";
-import { DiagramSelector } from "./components/DiagramSelector";
+import { DiagramLibrary } from "./pages/Home";
 import { PresenceIndicator, LiveCursor } from "./components/PresenceIndicator";
 import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
 import { Minimap } from "./components/Minimap";
@@ -5214,7 +5214,7 @@ export default function App() {
   // Show diagram selector
   if (showSelector && !selectedDiagram) {
     return (
-      <DiagramSelector
+      <DiagramLibrary
         diagrams={diagrams}
         loading={cloudLoading || !profileExists}
         error={cloudError}
@@ -5246,10 +5246,6 @@ export default function App() {
           }
         }}
         onLogout={handleLogout}
-        onTeamSwitch={() => {
-          // Team switch handled by refresh in DiagramSelector
-          logger.log('Switching to team');
-        }}
       />
     );
   }

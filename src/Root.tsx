@@ -13,6 +13,7 @@ const AuthPage = React.lazy(async () => {
 });
 const AdminPage = React.lazy(() => import("./pages/Admin"));
 const SettingsPage = React.lazy(() => import("./pages/Settings"));
+const MermaidStudio = React.lazy(() => import("./pages/MermaidStudio"));
 
 type StartupCfg = {
   url: string;
@@ -85,6 +86,7 @@ export function Root() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/mermaid" element={<MermaidStudio />} />
             <Route path="/*" element={<App />} />
           </Routes>
           {/* <DiagnosticsPanel /> */}
