@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mermaid from "mermaid";
 import { Download, Copy, Check, FileCode2, Image as ImageIcon, RefreshCw, Waypoints } from "lucide-react";
 import { AppShell } from "../components/shell/AppShell";
