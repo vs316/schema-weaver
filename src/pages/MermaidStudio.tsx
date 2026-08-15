@@ -141,10 +141,13 @@ export default function MermaidStudio() {
       setRendering(true);
       try {
         const id = `mmd-${++idRef.current}`;
+        console.log("mmd:start", id);
         const { svg: out } = await mermaid.render(id, source);
+        console.log("mmd:done", out.length);
         setSvg(out);
         setError(null);
       } catch (e: any) {
+        console.log("mmd:err", String(e));
         setError(String(e?.message ?? e).split("\n").slice(0, 6).join("\n"));
       } finally {
         setRendering(false);
