@@ -95,3 +95,23 @@ Per-diagram permissions layered over team roles; RLS rewritten to multi-team mem
 ## 5. What ships when
 
 Each phase is independently usable and shipped in order, starting with Phase 1. Phase 3 (Mermaid) is the first big new capability after the foundation, since it depends on the unified document model from Phase 2.
+## 6. Addendum — Lexical editor foundation + collaboration everywhere
+
+**Build on open source instead of from scratch.** The document/rich-text layer is built on **Lexical** (Meta's open-source editor framework) rather than a bespoke editor:
+
+- Lexical core + React bindings, with the official rich-text, list, link, table, markdown-shortcut, and history plugins.
+- Custom Lovable nodes on top: `/` slash-command menu, callouts, code blocks with syntax highlight, embedded diagram nodes (an ERD/Mermaid diagram rendered inline and openable on canvas), file/attachment nodes, and mention nodes.
+- Export pipeline from the Lexical document model: PDF, DOCX, Markdown, HTML; import from Markdown/DOCX. Slides (PPTX) and sheets (XLSX) reuse the same export service.
+- Other open-source building blocks used the same way: `mermaid` (parse/render), CodeMirror 6 (code panes), `perfect-freehand` (ink), `elkjs`/`dagre` (auto-layout), `yjs` + `y-websocket`-style CRDT transport over the existing realtime channels, and `docx`/`pptx`/`xlsx` writers for document export.
+
+**Real-time collaboration is a platform layer, not a per-surface feature.** Every surface — canvas, Mermaid studio, documents, sheets, slides, the diagram library, and settings-free read views — joins a shared "room":
+
+- One reusable room layer (presence + broadcast + CRDT doc) keyed by resource id, so any new surface gets collaboration by mounting one hook.
+- Live teammate cursors with name labels on every surface (canvas coordinates on diagrams, caret/selection positions in documents).
+- Live selection highlights: see exactly which table, node, block, or text range each teammate has selected, in their colour.
+- A "who's here" bar with avatars, follow-mode (jump to and track a teammate's viewport), and an activity view showing what each teammate is editing right now across the workspace.
+- Presence-aware editing: soft locks/ghosting on the element a teammate is actively editing, typing indicators, and conflict-free merges via CRDT rather than last-write-wins.
+- Comments, mentions and resolve threads anchored to blocks and canvas objects, with a notification inbox.
+- Offline queue with replay on reconnect, so collaboration survives flaky networks.
+
+Reference bar for the experience: Notion, Google Docs, Figma, draw.io and Excalidraw — cursors, selections, presence, and instant convergence.

@@ -11,10 +11,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lexical/link": "^0.49.0",
+    "@lexical/list": "^0.49.0",
+    "@lexical/markdown": "^0.49.0",
+    "@lexical/react": "^0.49.0",
+    "@lexical/rich-text": "^0.49.0",
+    "@lexical/selection": "^0.49.0",
+    "@lexical/utils": "^0.49.0",
     "@supabase/supabase-js": "^2.89.0",
     "@tailwindcss/vite": "^4.1.18",
     "framer-motion": "^12.23.26",
     "html2canvas": "^1.4.1",
+    "lexical": "^0.49.0",
     "lovable-tagger": "^1.1.13",
     "lucide-react": "^0.562.0",
     "mermaid": "^11.16.1",
