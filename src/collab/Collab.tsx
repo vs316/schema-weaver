@@ -1,5 +1,4 @@
-import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Radio, Users } from "lucide-react";
 import { cn } from "../ui/cn";
 import type { RoomPeer } from "./useLiveRoom";
