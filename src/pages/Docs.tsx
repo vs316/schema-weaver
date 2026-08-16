@@ -382,7 +382,7 @@ export default function DocsPage() {
         className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none"
         aria-label="Document title"
       />
-      <Badge variant={saving === "error" ? "destructive" : "muted"}>
+      <Badge tone={saving === "error" ? "danger" : "neutral"}>
         {saving === "saving" ? (
           <>
             <Cloud size={11} /> Saving
