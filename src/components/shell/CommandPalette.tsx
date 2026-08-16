@@ -14,6 +14,7 @@ import {
   Type,
   CornerDownLeft,
   Waypoints,
+  FileText,
 } from "lucide-react";
 import { cn } from "../../ui/cn";
 import { useAppearance } from "../AppearanceProvider";
@@ -46,6 +47,7 @@ export function CommandPalette({
     const base: Command[] = [
       { id: "go-home", group: "Navigate", label: "Go to Home", icon: <Home size={15} />, run: () => navigate("/diagrams") },
       { id: "go-mermaid", group: "Navigate", label: "Open Mermaid studio", icon: <Waypoints size={15} />, keywords: "mermaid code diagram", run: () => navigate("/mermaid") },
+      { id: "go-docs", group: "Navigate", label: "Open Documents", icon: <FileText size={15} />, keywords: "docs write notes lexical", run: () => navigate("/docs") },
       { id: "go-team", group: "Navigate", label: "Go to Team", icon: <Users size={15} />, run: () => navigate("/team") },
       { id: "go-settings", group: "Navigate", label: "Open Settings", icon: <SettingsIcon size={15} />, run: () => navigate("/settings") },
 

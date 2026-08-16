@@ -41,6 +41,56 @@ export type Database = {
         }
         Relationships: []
       }
+      documents: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          icon: string
+          id: string
+          is_archived: boolean
+          plain_text: string
+          team_id: string | null
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          icon?: string
+          id?: string
+          is_archived?: boolean
+          plain_text?: string
+          team_id?: string | null
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          icon?: string
+          id?: string
+          is_archived?: boolean
+          plain_text?: string
+          team_id?: string | null
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       erd_diagrams: {
         Row: {
           created_at: string
