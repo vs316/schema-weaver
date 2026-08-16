@@ -16,6 +16,7 @@ import { CodeNode, CodeHighlightNode } from "@lexical/code";
 import { TRANSFORMERS } from "@lexical/markdown";
 import { $getRoot, type EditorState, type LexicalEditor } from "lexical";
 import { FileText, Plus, Search, Trash2, Users2, Cloud, CloudOff } from "lucide-react";
+import { Navigate } from "react-router-dom";
 
 import { AppShell } from "../components/shell/AppShell";
 import { Button } from "../ui/Button";
@@ -159,7 +160,7 @@ function CaptureEditor({ editorRef }: { editorRef: React.MutableRefObject<Lexica
 }
 
 export default function DocsPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,7 +189,11 @@ export default function DocsPage() {
 
   // Load team + documents
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -213,7 +218,7 @@ export default function DocsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, authLoading]);
 
   // Realtime: teammates' saved changes
   useEffect(() => {
@@ -413,6 +418,8 @@ export default function DocsPage() {
       <PresenceBar peers={peers} isConnected={isConnected} />
     </div>
   );
+
+  if (!authLoading && !user) return <Navigate to="/auth" replace />;
 
   return (
     <AppShell sidebar={sidebar} sidebarTitle="Documents" header={header}>
