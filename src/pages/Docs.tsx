@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -89,7 +89,7 @@ function RemoteStatePlugin({
   return null;
 }
 
-function EditorSurface({
+const EditorSurface = memo(function EditorSurface({
   doc,
   onChange,
   remote,
@@ -149,7 +149,9 @@ function EditorSurface({
       </div>
     </LexicalComposer>
   );
-}
+},
+// Only re-render the editor tree when the document or a remote update changes.
+(a, b) => a.doc.id === b.doc.id && a.remote === b.remote);
 
 function CaptureEditor({ editorRef }: { editorRef: React.MutableRefObject<LexicalEditor | null> }) {
   const [editor] = useLexicalComposerContext();
@@ -279,7 +281,7 @@ export default function DocsPage() {
       saveTimer.current = setTimeout(() => {
         persist(activeId, { content: json, plain_text: text } as Partial<DocRow>);
         setDocs((prev) =>
-          prev.map((d) => (d.id === activeId ? { ...d, content: json, plain_text: text } : d)),
+          prev.map((d) => (d.id === activeId ? { ...d, plain_text: text } : d)),
         );
       }, 900);
     },
