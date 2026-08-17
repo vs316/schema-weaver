@@ -223,11 +223,15 @@ export default function DocsPage() {
     };
   }, [user, authLoading]);
 
-  // Realtime: teammates' saved changes
+  // Realtime: instant edit broadcasts + persisted changes from teammates
   useEffect(() => {
     if (!activeDoc) return;
     const channel = supabase
       .channel(`documents:${activeDoc.id}`)
+      .on("broadcast", { event: "doc-state" }, ({ payload }) => {
+        if (!payload || payload.userId === user?.id) return;
+        setRemote({ state: payload.state, at: Date.now() });
+      })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "documents", filter: `id=eq.${activeDoc.id}` },
@@ -241,10 +245,13 @@ export default function DocsPage() {
         },
       )
       .subscribe();
+    docChannelRef.current = channel;
     return () => {
+      docChannelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [activeDoc?.id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const persist = useCallback(
     async (id: string, patch: Partial<DocRow>) => {
