@@ -73,7 +73,7 @@ export function DiagramLibrary({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { peers, isConnected } = useLiveRoom({
-    roomId: teamId ? `team:${teamId}` : "workspace",
+    roomId: "workspace:library",
     userId: user?.id ?? null,
     userName:
       (user?.user_metadata as any)?.display_name || user?.email?.split("@")[0] || "Anonymous",
