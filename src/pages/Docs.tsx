@@ -173,6 +173,8 @@ export default function DocsPage() {
   const [showActivity, setShowActivity] = useState(true);
 
   const isTypingRef = useRef(0);
+  const docChannelRef = useRef<any>(null);
+  const lastBroadcast = useRef(0);
   const latestContentRef = useRef<{ content: any; plain_text: string } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<LexicalEditor | null>(null);
@@ -284,6 +286,17 @@ export default function DocsPage() {
       // content in a ref and only write it back to state after it is persisted.
       latestContentRef.current = { content: json, plain_text: text };
 
+      // Push the edit to teammates immediately (sub-second), independent of saving.
+      const now = Date.now();
+      if (docChannelRef.current && now - lastBroadcast.current > 250) {
+        lastBroadcast.current = now;
+        docChannelRef.current.send({
+          type: "broadcast",
+          event: "doc-state",
+          payload: { userId: user?.id, state: JSON.stringify(json) },
+        });
+      }
+
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         persist(activeId, { content: json, plain_text: text } as Partial<DocRow>);
@@ -292,7 +305,7 @@ export default function DocsPage() {
         );
       }, 900);
     },
-    [activeId, persist],
+    [activeId, persist, user?.id],
   );
 
   const createDoc = useCallback(async () => {
