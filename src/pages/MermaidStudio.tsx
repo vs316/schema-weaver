@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mermaid from "mermaid";
 import { Download, Copy, Check, FileCode2, Image as ImageIcon, RefreshCw, Waypoints } from "lucide-react";
 import { AppShell } from "../components/shell/AppShell";
+import { useAuth } from "../hooks/useAuth";
+import { useLiveRoom } from "../collab/useLiveRoom";
+import { PresenceBar, LiveCursors } from "../collab/Collab";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Surface";
 import { useAppearance } from "../components/AppearanceProvider";
@@ -111,6 +114,47 @@ export default function MermaidStudio() {
   const [copied, setCopied] = useState(false);
   const [rendering, setRendering] = useState(false);
   const idRef = useRef(0);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const lastLocalEdit = useRef(0);
+  const lastSent = useRef(0);
+
+  const { user } = useAuth();
+  const userName =
+    (user?.user_metadata as any)?.display_name || user?.email?.split("@")[0] || "Anonymous";
+
+  const { peers, isConnected, updateCursor, sendOp } = useLiveRoom({
+    roomId: "mermaid:studio",
+    userId: user?.id ?? null,
+    userName,
+    activity: "Editing Mermaid source",
+    onOp: (payload) => {
+      if (payload?.kind !== "mermaid-code") return;
+      if (Date.now() - lastLocalEdit.current < 1200) return;
+      setCode(payload.code);
+    },
+  });
+
+  const onCodeChange = useCallback(
+    (next: string) => {
+      setCode(next);
+      lastLocalEdit.current = Date.now();
+      const now = Date.now();
+      if (now - lastSent.current > 250) {
+        lastSent.current = now;
+        sendOp({ kind: "mermaid-code", code: next });
+      }
+    },
+    [sendOp],
+  );
+
+  const onPreviewMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      const rect = previewRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      updateCursor(e.clientX - rect.left, e.clientY - rect.top);
+    },
+    [updateCursor],
+  );
 
   const isDark = useMemo(() => {
     if (appearance.theme === "light") return false;
@@ -226,6 +270,7 @@ export default function MermaidStudio() {
     <div className="flex w-full items-center gap-2">
       <span className="text-sm font-semibold text-foreground">Mermaid studio</span>
       {rendering && <RefreshCw size={13} className="animate-spin text-muted-foreground" />}
+      <PresenceBar peers={peers} isConnected={isConnected} className="ml-2" />
       <div className="ml-auto flex items-center gap-1.5">
         <Button size="sm" variant="ghost" iconLeft={copied ? <Check size={14} /> : <Copy size={14} />} onClick={copyCode}>
           {copied ? "Copied" : "Copy"}
@@ -249,7 +294,7 @@ export default function MermaidStudio() {
         <div className="flex min-h-[40vh] flex-col border-b border-border lg:border-b-0 lg:border-r">
           <textarea
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => onCodeChange(e.target.value)}
             spellCheck={false}
             aria-label="Mermaid source"
             className="h-full w-full flex-1 resize-none bg-surface p-4 font-mono text-[13px] leading-relaxed text-foreground outline-none"
@@ -260,7 +305,12 @@ export default function MermaidStudio() {
             </Card>
           )}
         </div>
-        <div className={cn("relative min-h-[40vh] overflow-auto bg-canvas p-6")}>
+        <div
+          ref={previewRef}
+          onMouseMove={onPreviewMouseMove}
+          className={cn("relative min-h-[40vh] overflow-auto bg-canvas p-6")}
+        >
+          <LiveCursors peers={peers} />
           {svg ? (
             <div
               className="mermaid-preview flex min-h-full items-center justify-center [&_svg]:max-w-full"

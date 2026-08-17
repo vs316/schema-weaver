@@ -17,6 +17,9 @@ import {
 import type { ERDDiagram } from "../hooks/useCloudSync";
 import type { DiagramType } from "../types/uml";
 import { AppShell } from "../components/shell/AppShell";
+import { useAuth } from "../hooks/useAuth";
+import { useLiveRoom } from "../collab/useLiveRoom";
+import { PresenceBar } from "../collab/Collab";
 import { Card, Badge, EmptyState, Skeleton } from "../ui/Surface";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
