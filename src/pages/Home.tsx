@@ -71,6 +71,14 @@ export function DiagramLibrary({
   onLogout,
 }: DiagramLibraryProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { peers, isConnected } = useLiveRoom({
+    roomId: teamId ? `team:${teamId}` : "workspace",
+    userId: user?.id ?? null,
+    userName:
+      (user?.user_metadata as any)?.display_name || user?.email?.split("@")[0] || "Anonymous",
+    activity: "Browsing the diagram library",
+  });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DiagramType | "all">("all");
   const [creating, setCreating] = useState(false);
@@ -151,7 +159,7 @@ export function DiagramLibrary({
   );
 
   return (
-    <AppShell sidebar={sidebar} sidebarTitle="Workspace">
+    <AppShell sidebar={sidebar} sidebarTitle="Workspace" header={<div className="flex w-full items-center justify-end"><PresenceBar peers={peers} isConnected={isConnected} /></div>}>
       <div className="mx-auto w-full max-w-6xl px-6 py-8 animate-fade-in">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
