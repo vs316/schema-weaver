@@ -171,6 +171,7 @@ export default function DocsPage() {
   const [showActivity, setShowActivity] = useState(true);
 
   const isTypingRef = useRef(0);
+  const latestContentRef = useRef<{ content: any; plain_text: string } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<LexicalEditor | null>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -277,6 +278,9 @@ export default function DocsPage() {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         persist(activeId, { content: json, plain_text: text } as Partial<DocRow>);
+        setDocs((prev) =>
+          prev.map((d) => (d.id === activeId ? { ...d, content: json, plain_text: text } : d)),
+        );
       }, 900);
     },
     [activeId, persist],
