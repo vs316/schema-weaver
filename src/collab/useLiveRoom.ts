@@ -38,9 +38,11 @@ export interface UseLiveRoomOptions {
   userName?: string | null;
   /** What this user is doing — broadcast to teammates. */
   activity?: string;
+  /** Receive collaborative operations sent by teammates in the same room. */
+  onOp?: (payload: any) => void;
 }
 
-export function useLiveRoom({ roomId, userId, userName, activity }: UseLiveRoomOptions) {
+export function useLiveRoom({ roomId, userId, userName, activity, onOp }: UseLiveRoomOptions) {
   const [peers, setPeers] = useState<RoomPeer[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -50,7 +52,9 @@ export function useLiveRoom({ roomId, userId, userName, activity }: UseLiveRoomO
   const activityRef = useRef<string | undefined>(activity);
   const selectionRef = useRef<string | null>(null);
 
+  const onOpRef = useRef(onOp);
   activityRef.current = activity;
+  onOpRef.current = onOp;
 
   const me = useMemo(
     () =>
@@ -96,6 +100,10 @@ export function useLiveRoom({ roomId, userId, userName, activity }: UseLiveRoomO
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
         (leftPresences as any[]).forEach((p) => p?.id && peersRef.current.delete(p.id));
         flush();
+      })
+      .on("broadcast", { event: "op" }, ({ payload }) => {
+        if (!payload || payload.userId === me.id) return;
+        onOpRef.current?.(payload);
       })
       .on("broadcast", { event: "cursor" }, ({ payload }) => {
         if (!payload?.userId || payload.userId === me.id) return;
@@ -188,5 +196,18 @@ export function useLiveRoom({ roomId, userId, userName, activity }: UseLiveRoomO
     [me],
   );
 
-  return { peers, isConnected, updateCursor, setSelection, me };
+  /** Send a collaborative operation to everyone else in the room. */
+  const sendOp = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!channelRef.current || !me) return;
+      channelRef.current.send({
+        type: "broadcast",
+        event: "op",
+        payload: { ...payload, userId: me.id, userName: me.name },
+      });
+    },
+    [me],
+  );
+
+  return { peers, isConnected, updateCursor, setSelection, sendOp, me };
 }

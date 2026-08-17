@@ -17,6 +17,9 @@ import {
 import type { ERDDiagram } from "../hooks/useCloudSync";
 import type { DiagramType } from "../types/uml";
 import { AppShell } from "../components/shell/AppShell";
+import { useAuth } from "../hooks/useAuth";
+import { useLiveRoom } from "../collab/useLiveRoom";
+import { PresenceBar } from "../collab/Collab";
 import { Card, Badge, EmptyState, Skeleton } from "../ui/Surface";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -68,6 +71,14 @@ export function DiagramLibrary({
   onLogout,
 }: DiagramLibraryProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { peers, isConnected } = useLiveRoom({
+    roomId: "workspace:library",
+    userId: user?.id ?? null,
+    userName:
+      (user?.user_metadata as any)?.display_name || user?.email?.split("@")[0] || "Anonymous",
+    activity: "Browsing the diagram library",
+  });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DiagramType | "all">("all");
   const [creating, setCreating] = useState(false);
@@ -148,7 +159,7 @@ export function DiagramLibrary({
   );
 
   return (
-    <AppShell sidebar={sidebar} sidebarTitle="Workspace">
+    <AppShell sidebar={sidebar} sidebarTitle="Workspace" header={<div className="flex w-full items-center justify-end"><PresenceBar peers={peers} isConnected={isConnected} /></div>}>
       <div className="mx-auto w-full max-w-6xl px-6 py-8 animate-fade-in">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>

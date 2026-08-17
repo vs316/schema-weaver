@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -89,7 +89,7 @@ function RemoteStatePlugin({
   return null;
 }
 
-function EditorSurface({
+const EditorSurface = memo(function EditorSurface({
   doc,
   onChange,
   remote,
@@ -149,7 +149,9 @@ function EditorSurface({
       </div>
     </LexicalComposer>
   );
-}
+},
+// Only re-render the editor tree when the document or a remote update changes.
+(a, b) => a.doc.id === b.doc.id && a.remote === b.remote);
 
 function CaptureEditor({ editorRef }: { editorRef: React.MutableRefObject<LexicalEditor | null> }) {
   const [editor] = useLexicalComposerContext();
@@ -171,6 +173,9 @@ export default function DocsPage() {
   const [showActivity, setShowActivity] = useState(true);
 
   const isTypingRef = useRef(0);
+  const docChannelRef = useRef<any>(null);
+  const lastBroadcast = useRef(0);
+  const latestContentRef = useRef<{ content: any; plain_text: string } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<LexicalEditor | null>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -220,11 +225,15 @@ export default function DocsPage() {
     };
   }, [user, authLoading]);
 
-  // Realtime: teammates' saved changes
+  // Realtime: instant edit broadcasts + persisted changes from teammates
   useEffect(() => {
     if (!activeDoc) return;
     const channel = supabase
       .channel(`documents:${activeDoc.id}`)
+      .on("broadcast", { event: "doc-state" }, ({ payload }) => {
+        if (!payload || payload.userId === user?.id) return;
+        setRemote({ state: payload.state, at: Date.now() });
+      })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "documents", filter: `id=eq.${activeDoc.id}` },
@@ -238,10 +247,13 @@ export default function DocsPage() {
         },
       )
       .subscribe();
+    docChannelRef.current = channel;
     return () => {
+      docChannelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [activeDoc?.id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const persist = useCallback(
     async (id: string, patch: Partial<DocRow>) => {
@@ -270,15 +282,30 @@ export default function DocsPage() {
       state.read(() => {
         text = $getRoot().getTextContent().slice(0, 400);
       });
-      setDocs((prev) =>
-        prev.map((d) => (d.id === activeId ? { ...d, content: json, plain_text: text } : d)),
-      );
+      // Keep the editor tree free of re-renders while typing: hold the latest
+      // content in a ref and only write it back to state after it is persisted.
+      latestContentRef.current = { content: json, plain_text: text };
+
+      // Push the edit to teammates immediately (sub-second), independent of saving.
+      const now = Date.now();
+      if (docChannelRef.current && now - lastBroadcast.current > 250) {
+        lastBroadcast.current = now;
+        docChannelRef.current.send({
+          type: "broadcast",
+          event: "doc-state",
+          payload: { userId: user?.id, state: JSON.stringify(json) },
+        });
+      }
+
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         persist(activeId, { content: json, plain_text: text } as Partial<DocRow>);
+        setDocs((prev) =>
+          prev.map((d) => (d.id === activeId ? { ...d, plain_text: text } : d)),
+        );
       }, 900);
     },
-    [activeId, persist],
+    [activeId, persist, user?.id],
   );
 
   const createDoc = useCallback(async () => {
