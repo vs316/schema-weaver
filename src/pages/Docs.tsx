@@ -270,9 +270,10 @@ export default function DocsPage() {
       state.read(() => {
         text = $getRoot().getTextContent().slice(0, 400);
       });
-      setDocs((prev) =>
-        prev.map((d) => (d.id === activeId ? { ...d, content: json, plain_text: text } : d)),
-      );
+      // Keep the editor tree free of re-renders while typing: hold the latest
+      // content in a ref and only write it back to state after it is persisted.
+      latestContentRef.current = { content: json, plain_text: text };
+
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         persist(activeId, { content: json, plain_text: text } as Partial<DocRow>);
