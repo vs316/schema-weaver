@@ -310,25 +310,50 @@ export default function DocsPage() {
 
   const createDoc = useCallback(async () => {
     if (!teamId) return;
-    const { data, error } = await supabase
-      .from("documents")
-      .insert({ team_id: teamId, created_by: user?.id ?? null, updated_by: user?.id ?? null } as any)
-      .select("id,title,icon,content,plain_text,updated_at,team_id")
-      .single();
+    // Optimistic: the document appears and is editable before the write lands.
+    const optimistic: DocRow = {
+      id: crypto.randomUUID(),
+      title: "Untitled document",
+      icon: "📄",
+      content: {} as any,
+      plain_text: "",
+      updated_at: new Date().toISOString(),
+      team_id: teamId,
+    } as DocRow;
+
+    setDocs((prev) => [optimistic, ...prev]);
+    setActiveId(optimistic.id);
+
+    const { error } = await supabase.from("documents").insert({
+      id: optimistic.id,
+      team_id: teamId,
+      created_by: user?.id ?? null,
+      updated_by: user?.id ?? null,
+    } as any);
+
     if (error) {
       logger.error("docs:create", error);
-      return;
+      setDocs((prev) => prev.filter((d) => d.id !== optimistic.id));
+      setActiveId((prev) => (prev === optimistic.id ? null : prev));
     }
-    setDocs((prev) => [data as DocRow, ...prev]);
-    setActiveId((data as DocRow).id);
   }, [teamId, user?.id]);
 
   const deleteDoc = useCallback(
     async (id: string) => {
-      setDocs((prev) => prev.filter((d) => d.id !== id));
+      let removed: DocRow | undefined;
+      setDocs((prev) => {
+        removed = prev.find((d) => d.id === id);
+        return prev.filter((d) => d.id !== id);
+      });
       setActiveId((prev) => (prev === id ? null : prev));
       const { error } = await supabase.from("documents").delete().eq("id", id);
-      if (error) logger.error("docs:delete", error);
+      if (error) {
+        logger.error("docs:delete", error);
+        if (removed) {
+          const restored = removed;
+          setDocs((prev) => [restored, ...prev]);
+        }
+      }
     },
     [],
   );
