@@ -5235,15 +5235,12 @@ export default function App() {
             setShowSelector(false);
           }
         }}
-        onDelete={async (id) => {
-          await deleteDiagram(id);
+        onDelete={(id) => {
+          void deleteDiagram(id);
         }}
-        onRename={async (id, name) => {
-          await saveDiagram(id, { name } as any);
-          // Refresh diagrams
-          if (teamId) {
-            fetchDiagrams(teamId);
-          }
+        onRename={(id, name) => {
+          // Optimistic: the list updates instantly; the write happens in the background.
+          void renameDiagram(id, name);
         }}
         onLogout={handleLogout}
       />

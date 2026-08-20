@@ -80,7 +80,7 @@ const TEMPLATES: { id: string; label: string; code: string }[] = [
     id: "mindmap",
     label: "Mindmap",
     code: `mindmap
-  root((Diagram Studio))
+  root((Strand))
     Data
       ERD
       SQL export

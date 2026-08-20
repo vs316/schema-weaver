@@ -79,7 +79,7 @@ export function AppShell({
         <button
           onClick={() => navigate("/diagrams")}
           className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-smooth hover:brightness-110"
-          aria-label="Diagram Studio home"
+          aria-label="Strand home"
         >
           <span className="text-sm font-extrabold">D</span>
         </button>

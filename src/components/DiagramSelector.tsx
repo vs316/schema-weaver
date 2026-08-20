@@ -236,12 +236,12 @@ export function DiagramSelector({
             {/* Logo - use light variant for light mode */}
             <img 
               src={isDarkMode ? "/logo.png" : "/logo-light.png"} 
-              alt="ERD Studio" 
+              alt="Strand" 
               className="w-12 h-12 rounded-xl"
             />
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2 transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(210 40% 98%)' : 'hsl(222 47% 11%)' }}>
-                ERD Studio
+                Strand
               </h1>
               <p className="text-sm transition-colors duration-300" style={{ color: isDarkMode ? 'hsl(215 20% 65%)' : 'hsl(215 16% 47%)' }}>
                 Select a diagram to continue or create a new one
