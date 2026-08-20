@@ -41,6 +41,51 @@ export type Database = {
         }
         Relationships: []
       }
+      diagram_versions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          diagram_id: string
+          id: string
+          label: string
+          snapshot: Json
+          team_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          diagram_id: string
+          id?: string
+          label?: string
+          snapshot?: Json
+          team_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          diagram_id?: string
+          id?: string
+          label?: string
+          snapshot?: Json
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagram_versions_diagram_id_fkey"
+            columns: ["diagram_id"]
+            isOneToOne: false
+            referencedRelation: "erd_diagrams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diagram_versions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           content: Json
@@ -98,16 +143,21 @@ export type Database = {
           diagram_type: string
           flowchart_connections: Json
           flowchart_nodes: Json
+          folder: string | null
           id: string
           is_dark_mode: boolean
+          is_favorite: boolean
           is_locked: boolean
+          is_trashed: boolean
           locked_by: string | null
           name: string
           relations: Json
           sequence_messages: Json
           sequence_participants: Json
           tables: Json
+          tags: string[]
           team_id: string | null
+          trashed_at: string | null
           uml_classes: Json
           uml_relations: Json
           updated_at: string
@@ -120,16 +170,21 @@ export type Database = {
           diagram_type?: string
           flowchart_connections?: Json
           flowchart_nodes?: Json
+          folder?: string | null
           id?: string
           is_dark_mode?: boolean
+          is_favorite?: boolean
           is_locked?: boolean
+          is_trashed?: boolean
           locked_by?: string | null
           name?: string
           relations?: Json
           sequence_messages?: Json
           sequence_participants?: Json
           tables?: Json
+          tags?: string[]
           team_id?: string | null
+          trashed_at?: string | null
           uml_classes?: Json
           uml_relations?: Json
           updated_at?: string
@@ -142,16 +197,21 @@ export type Database = {
           diagram_type?: string
           flowchart_connections?: Json
           flowchart_nodes?: Json
+          folder?: string | null
           id?: string
           is_dark_mode?: boolean
+          is_favorite?: boolean
           is_locked?: boolean
+          is_trashed?: boolean
           locked_by?: string | null
           name?: string
           relations?: Json
           sequence_messages?: Json
           sequence_participants?: Json
           tables?: Json
+          tags?: string[]
           team_id?: string | null
+          trashed_at?: string | null
           uml_classes?: Json
           uml_relations?: Json
           updated_at?: string
