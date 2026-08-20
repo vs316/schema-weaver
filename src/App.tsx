@@ -5133,8 +5133,8 @@ export default function App() {
     createDiagram,
     saveDiagram,
     deleteDiagram,
+    renameDiagram,
     loadDiagram,
-    fetchDiagrams,
     profileExists,
     error: cloudError,
   } = useCloudSync(userId);
