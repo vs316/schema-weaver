@@ -194,45 +194,87 @@ export function useCloudSync(userId?: string) {
   const createDiagram = async (name: string, diagramType: DiagramType = 'erd'): Promise<ERDDiagram | null> => {
     if (!teamId) return null;
 
+    // Optimistic: build the row locally and show it instantly, then persist.
+    const now = new Date().toISOString();
+    const optimistic: ERDDiagram = {
+      id: crypto.randomUUID(),
+      name,
+      diagram_type: diagramType,
+      tables: [],
+      relations: [],
+      uml_classes: [],
+      uml_relations: [],
+      flowchart_nodes: [],
+      flowchart_connections: [],
+      sequence_participants: [],
+      sequence_messages: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      is_dark_mode: true,
+      is_locked: false,
+      team_id: teamId,
+      created_at: now,
+      updated_at: now,
+    } as unknown as ERDDiagram;
+
+    setDiagrams((prev) => [optimistic, ...prev]);
+    setCurrentDiagram(optimistic);
     setSyncing(true);
 
-    const { data, error } = await supabase
-      .from('erd_diagrams')
-      .insert({
-        name,
-        diagram_type: diagramType,
-        tables: [],
-        relations: [],
-        uml_classes: [],
-        uml_relations: [],
-        flowchart_nodes: [],
-        flowchart_connections: [],
-        sequence_participants: [],
-        sequence_messages: [],
-        // Avoid null/undefined viewport values which can cause NaN transforms in the canvas
-        viewport: { x: 0, y: 0, zoom: 1 },
-        // Default to dark; the UI will overwrite this to match the global ThemeProvider setting.
-        is_dark_mode: true,
-        is_locked: false,
-        team_id: teamId,
-      })
-      .select()
-      .single();
+    const { error } = await supabase.from('erd_diagrams').insert({
+      id: optimistic.id,
+      name,
+      diagram_type: diagramType,
+      tables: [],
+      relations: [],
+      uml_classes: [],
+      uml_relations: [],
+      flowchart_nodes: [],
+      flowchart_connections: [],
+      sequence_participants: [],
+      sequence_messages: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      is_dark_mode: true,
+      is_locked: false,
+      team_id: teamId,
+    });
 
     setSyncing(false);
 
-    if (error || !data) return null;
+    if (error) {
+      // Roll the optimistic row back if the write failed.
+      logger.error('cloud:create-diagram', error);
+      setDiagrams((prev) => prev.filter((d) => d.id !== optimistic.id));
+      setCurrentDiagram((prev) => (prev?.id === optimistic.id ? null : prev));
+      return null;
+    }
 
-    // Cast diagram_type to DiagramType
-    const typedData: ERDDiagram = {
-      ...data,
-      diagram_type: (data.diagram_type || 'erd') as DiagramType,
-    };
+    return optimistic;
+  };
 
-    setDiagrams((prev) => [typedData, ...prev]);
-    setCurrentDiagram(typedData);
+  /** Optimistic rename: the list updates instantly, then the write follows. */
+  const renameDiagram = async (id: string, name: string) => {
+    let previous: string | undefined;
+    setDiagrams((prev) =>
+      prev.map((d) => {
+        if (d.id !== id) return d;
+        previous = d.name;
+        return { ...d, name };
+      }),
+    );
+    setCurrentDiagram((prev) => (prev?.id === id ? { ...prev, name } : prev));
 
-    return typedData;
+    const { error } = await supabase
+      .from('erd_diagrams')
+      .update({ name, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) {
+      logger.error('cloud:rename-diagram', error);
+      if (previous !== undefined) {
+        const restored = previous;
+        setDiagrams((prev) => prev.map((d) => (d.id === id ? { ...d, name: restored } : d)));
+      }
+    }
   };
 
   const saveDiagram = async (
@@ -266,11 +308,26 @@ export function useCloudSync(userId?: string) {
   };
 
   const deleteDiagram = async (id: string) => {
-    await supabase.from('erd_diagrams').delete().eq('id', id);
-    setDiagrams((prev) => prev.filter((d) => d.id !== id));
+    // Optimistic: drop it from the list immediately, restore if the write fails.
+    let removed: ERDDiagram | undefined;
+    let index = 0;
+    setDiagrams((prev) => {
+      index = prev.findIndex((d) => d.id === id);
+      removed = prev[index];
+      return prev.filter((d) => d.id !== id);
+    });
 
     if (currentDiagram?.id === id) {
       setCurrentDiagram(null);
+    }
+
+    const { error } = await supabase.from('erd_diagrams').delete().eq('id', id);
+
+    if (error && removed) {
+      logger.error('cloud:delete-diagram', error);
+      const restored = removed;
+      const at = Math.max(index, 0);
+      setDiagrams((prev) => [...prev.slice(0, at), restored, ...prev.slice(at)]);
     }
   };
 
@@ -303,6 +360,7 @@ export function useCloudSync(userId?: string) {
     createDiagram,
     saveDiagram,
     deleteDiagram,
+    renameDiagram,
     loadDiagram,
     setCurrentDiagram,
   };
